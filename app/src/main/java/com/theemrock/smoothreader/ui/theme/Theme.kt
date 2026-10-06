@@ -33,6 +33,13 @@ private fun darkMaterialColorScheme(colors: SmoothAppColors): ColorScheme = dark
     onBackground = colors.textPrimary,
     surface = colors.surface,
     onSurface = colors.textPrimary,
+    surfaceBright = colors.surfaceHigh,
+    surfaceDim = colors.background,
+    surfaceContainerLowest = colors.background,
+    surfaceContainerLow = colors.surface,
+    surfaceContainer = colors.surface,
+    surfaceContainerHigh = colors.surfaceRaised,
+    surfaceContainerHighest = colors.surfaceHigh,
     surfaceVariant = colors.surfaceRaised,
     onSurfaceVariant = colors.textSecondary,
     surfaceTint = colors.surface,
@@ -65,6 +72,13 @@ private fun lightMaterialColorScheme(colors: SmoothAppColors): ColorScheme = lig
     onBackground = colors.textPrimary,
     surface = colors.surface,
     onSurface = colors.textPrimary,
+    surfaceBright = colors.surfaceHigh,
+    surfaceDim = colors.background,
+    surfaceContainerLowest = colors.background,
+    surfaceContainerLow = colors.surface,
+    surfaceContainer = colors.surface,
+    surfaceContainerHigh = colors.surfaceRaised,
+    surfaceContainerHighest = colors.surfaceHigh,
     surfaceVariant = colors.surfaceRaised,
     onSurfaceVariant = colors.textSecondary,
     surfaceTint = colors.surface,
@@ -96,6 +110,7 @@ fun SmoothAppTheme(
         MaterialTheme(
             colorScheme = materialColors,
             typography = Typography,
+            shapes = SmoothShapes,
             content = content
         )
     }

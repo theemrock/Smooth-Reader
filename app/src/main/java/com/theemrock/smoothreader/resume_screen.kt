@@ -7,13 +7,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import com.theemrock.smoothreader.ui.theme.SmoothIconSize
+import com.theemrock.smoothreader.ui.theme.SmoothSpacing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,13 +29,20 @@ fun ResumeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(state.book?.title ?: "Devam") },
+                title = {
+                    Text(
+                        state.book?.title ?: "Devam",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            Icons.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            modifier = Modifier.size(32.dp)        )            }
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Geri",
+                            modifier = Modifier.size(SmoothIconSize.standard)
+                        )
+                    }
                 }
             )
         }
@@ -54,14 +59,23 @@ fun ResumeScreen(
                     modifier = Modifier
                         .padding(pad)
                         .fillMaxSize()
-                        .padding(16.dp),
+                        .padding(SmoothSpacing.l),
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Text("Bu kitap şu an açılamadı:", fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(8.dp))
-                    Text(state.error ?: "Bilinmeyen hata", color = MaterialTheme.colorScheme.error)
-                    Spacer(Modifier.height(16.dp))
-                    Button(onClick = onBack) { Text("Geri") }
+                    Text(
+                        "Bu kitap şu an açılamadı:",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.height(SmoothSpacing.s))
+                    Text(
+                        state.error ?: "Bilinmeyen hata",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(Modifier.height(SmoothSpacing.l))
+                    Button(onClick = onBack) {
+                        Text("Geri", style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
 
@@ -72,7 +86,7 @@ fun ResumeScreen(
                     modifier = Modifier
                         .padding(pad)
                         .fillMaxSize()
-                        .padding(16.dp)
+                        .padding(SmoothSpacing.l)
                 ) {
                     // Preview alanı
                     Column(
@@ -87,24 +101,24 @@ fun ResumeScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(Modifier.height(6.dp))
+                            Spacer(Modifier.height(SmoothSpacing.s))
                         }
 
                         state.before.forEach {
                             PreviewPara(text = it, dim = true)
-                            Spacer(Modifier.height(10.dp))
+                            Spacer(Modifier.height(SmoothSpacing.m))
                         }
 
                         FocusPara(text = state.focus)
 
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(SmoothSpacing.m))
 
                         state.after.forEach {
                             PreviewPara(text = it, dim = true)
-                            Spacer(Modifier.height(10.dp))
+                            Spacer(Modifier.height(SmoothSpacing.m))
                         }
 
-                        Spacer(Modifier.height(14.dp))
+                        Spacer(Modifier.height(SmoothSpacing.l))
                         Text(
                             text = "Konum: ${state.focusIndex + 1} / ${state.totalParagraphs}",
                             style = MaterialTheme.typography.labelMedium,
@@ -112,19 +126,22 @@ fun ResumeScreen(
                         )
                     }
 
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(SmoothSpacing.l))
 
                     // Alt butonlar
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(SmoothSpacing.m)
+                    ) {
                         Button(
                             onClick = { onRead(bookId) },
                             modifier = Modifier.weight(1f)
-                        ) { Text("Oku") }
+                        ) { Text("Oku", style = MaterialTheme.typography.labelLarge) }
 
                         Button(
                             onClick = { onListen(bookId) },
                             modifier = Modifier.weight(1f)
-                        ) { Text("Dinle") }
+                        ) { Text("Dinle", style = MaterialTheme.typography.labelLarge) }
                     }
                 }
             }
@@ -141,11 +158,11 @@ private fun FocusPara(text: String) {
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = MaterialTheme.shapes.large
             )
-            .padding(14.dp)
+            .padding(SmoothSpacing.l)
     ) {
         Text("Kaldığın yer", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(8.dp))
-        Text(text, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(SmoothSpacing.s))
+        Text(text, style = MaterialTheme.typography.titleMedium)
     }
 }
 

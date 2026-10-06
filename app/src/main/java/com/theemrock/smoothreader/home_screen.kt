@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
@@ -18,10 +17,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.theemrock.smoothreader.ui.theme.SmoothFullShape
+import com.theemrock.smoothreader.ui.theme.SmoothIconSize
+import com.theemrock.smoothreader.ui.theme.SmoothSpacing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,17 +50,25 @@ fun HomeScreen(
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("KÜTÜPHANE TEST", fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.width(6.dp))
+                        Text("KÜTÜPHANE TEST", style = MaterialTheme.typography.titleLarge)
+                        Spacer(Modifier.width(SmoothSpacing.s))
                         Text("▾", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
                 actions = {
                     IconButton(onClick = { /* v1: sonra */ }) {
-                        Icon(Icons.Default.Search, contentDescription = "Ara")
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = "Ara",
+                            modifier = Modifier.size(SmoothIconSize.standard)
+                        )
                     }
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Ayarlar")
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = "Ayarlar",
+                            modifier = Modifier.size(SmoothIconSize.standard)
+                        )
                     }
                 }
             )
@@ -72,7 +81,11 @@ fun HomeScreen(
                     )
                 }
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Ekle")
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "Ekle",
+                    modifier = Modifier.size(SmoothIconSize.standard)
+                )
             }
         }
     ) { pad ->
@@ -81,7 +94,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .padding(pad)
                     .fillMaxSize()
-                    .padding(18.dp),
+                    .padding(SmoothSpacing.l),
                 onImport = {
                     docPicker.launch(
                         ImportFileType.pickerMimeTypes
@@ -94,9 +107,9 @@ fun HomeScreen(
                 modifier = Modifier
                     .padding(pad)
                     .fillMaxSize(),
-                contentPadding = PaddingValues(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                contentPadding = PaddingValues(SmoothSpacing.l),
+                horizontalArrangement = Arrangement.spacedBy(SmoothSpacing.m),
+                verticalArrangement = Arrangement.spacedBy(SmoothSpacing.m)
             ) {
                 items(state.books, key = { it.id }) { book ->
                     val progress = state.progressByBookId[book.id]
@@ -123,13 +136,16 @@ private fun EmptyLibrary(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text("Henüz kitap yok.", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(SmoothSpacing.s))
         Text(
             "Sağ alttaki + ile EPUB / DOCX / TXT ekleyebilirsin.",
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(Modifier.height(14.dp))
-        Button(onClick = onImport) { Text("Kitap Ekle") }
+        Spacer(Modifier.height(SmoothSpacing.l))
+        Button(onClick = onImport) {
+            Text("Kitap Ekle", style = MaterialTheme.typography.labelLarge)
+        }
     }
 }
 
@@ -150,32 +166,30 @@ private fun LibraryBookCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(14.dp))
+                .clip(MaterialTheme.shapes.large)
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
             // V1: kapak yoksa placeholder
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("📖", style = MaterialTheme.typography.headlineMedium)
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(SmoothSpacing.s))
                 Text(
                     book.type.name,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold
+                    style = MaterialTheme.typography.labelLarge
                 )
             }
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(SmoothSpacing.s))
 
         // Kitap adı + yazar
         Text(
             text = book.title,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold
+            style = MaterialTheme.typography.titleMedium
         )
 
         val author = book.author
@@ -188,10 +202,10 @@ private fun LibraryBookCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            Spacer(Modifier.height(16.dp)) // yazar yoksa hizayı koru
+            Spacer(Modifier.height(SmoothSpacing.l)) // yazar yoksa hizayı koru
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(SmoothSpacing.s))
 
         // Progress bar + %
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -200,10 +214,10 @@ private fun LibraryBookCard(
                 modifier = Modifier
                     .weight(1f)
                     .height(4.dp)
-                    .clip(RoundedCornerShape(50)),
+                    .clip(SmoothFullShape),
             )
             if (showPercent) {
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(SmoothSpacing.s))
                 Text(
                     text = "${progressPercent.coerceIn(0, 100)}%",
                     style = MaterialTheme.typography.labelMedium,

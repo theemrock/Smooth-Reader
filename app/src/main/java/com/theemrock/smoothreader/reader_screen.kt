@@ -126,9 +126,9 @@ private fun themeColorsFor(
 }
 
 private fun paperFor(theme: ReaderTheme): ReaderPaper = when (theme) {
-    ReaderTheme.GUNDUZ -> ReaderPaper(R.drawable.reader_paper_day, 0.18f)
-    ReaderTheme.GECE -> ReaderPaper(R.drawable.reader_paper_night, 0.22f)
-    ReaderTheme.SEPYA -> ReaderPaper(R.drawable.reader_paper_sepia, 0.18f)
+    ReaderTheme.GUNDUZ -> ReaderPaper(R.drawable.reader_paper_day, 0.50f)
+    ReaderTheme.GECE -> ReaderPaper(R.drawable.reader_paper_night, 0.35f)
+    ReaderTheme.SEPYA -> ReaderPaper(R.drawable.reader_paper_sepia, 0.50f)
 }
 
 /*

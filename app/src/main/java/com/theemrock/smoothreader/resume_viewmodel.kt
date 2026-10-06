@@ -23,7 +23,7 @@ class ResumeViewModel(app: Application) : AndroidViewModel(app) {
 
     private val libraryStore = LibraryStore(app.applicationContext)
     private val progressStore = ProgressStore(app.applicationContext)
-    private val parser = DocumentParserV1()
+    private val parser = DocumentParserV1(PdfParser(app.applicationContext))
 
     private val _bookId = MutableStateFlow<String?>(null)
     private val _state = MutableStateFlow(ResumeUiState())

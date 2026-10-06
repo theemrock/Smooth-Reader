@@ -3,7 +3,7 @@ package com.theemrock.smoothreader
 import android.net.Uri
 
 enum class BookType {
-    EPUB, DOCX, DOC, ODT, RTF, TXT
+    EPUB, DOCX, DOC, ODT, RTF, TXT, PDF
 }
 
 data class Book(

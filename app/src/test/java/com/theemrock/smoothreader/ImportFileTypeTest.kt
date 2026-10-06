@@ -6,7 +6,12 @@ import org.junit.Test
 
 class ImportFileTypeTest {
     @Test fun supportedNamesWorkWithGenericOrMissingMime() {
-        for ((extension, type) in listOf("EPUB" to BookType.EPUB, "TXT" to BookType.TXT, "DOCX" to BookType.DOCX)) {
+        for ((extension, type) in listOf(
+            "EPUB" to BookType.EPUB,
+            "TXT" to BookType.TXT,
+            "DOCX" to BookType.DOCX,
+            "PDF" to BookType.PDF
+        )) {
             assertEquals(type, ImportFileType.detect(null, "Türkçe kitap.$extension"))
             assertEquals(type, ImportFileType.detect("application/octet-stream", "Kitap.$extension"))
         }
@@ -19,10 +24,11 @@ class ImportFileTypeTest {
         assertEquals(BookType.TXT, ImportFileType.detect("TEXT/PLAIN; charset=utf-8", "Kitap"))
         assertEquals(BookType.DOCX, ImportFileType.detect(
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "Kitap"))
+        assertEquals(BookType.PDF, ImportFileType.detect("application/pdf", null))
     }
 
     @Test fun unsupportedExtensionsNeverFallBackToText() {
-        for (extension in listOf("pdf", "doc", "odt", "rtf", "jpg", "xyz", "zip")) {
+        for (extension in listOf("doc", "odt", "rtf", "jpg", "xyz", "zip")) {
             assertNull(ImportFileType.detect("text/plain", "Kitap.$extension"))
             assertNull(ImportFileType.detect(null, "Kitap.$extension"))
         }
@@ -32,6 +38,7 @@ class ImportFileTypeTest {
         assertNull(ImportFileType.detect(null, null))
         assertNull(ImportFileType.detect("application/octet-stream", "12345"))
         assertNull(ImportFileType.detect("application/pdf", "Kitap.txt"))
+        assertNull(ImportFileType.detect("text/plain", "Kitap.pdf"))
         assertNull(ImportFileType.detect("text/plain", "Kitap.docx"))
         assertNull(ImportFileType.detect("application/zip", "Kitap.txt"))
     }

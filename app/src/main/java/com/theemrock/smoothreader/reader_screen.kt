@@ -51,13 +51,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.paint
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -88,6 +91,11 @@ private data class ReaderThemeColors(
     val text: Color
 )
 
+private data class ReaderPaper(
+    val drawableRes: Int,
+    val alpha: Float
+)
+
 private fun themeColorsFor(
     theme: ReaderTheme
 ): ReaderThemeColors {
@@ -115,6 +123,12 @@ private fun themeColorsFor(
             )
         }
     }
+}
+
+private fun paperFor(theme: ReaderTheme): ReaderPaper = when (theme) {
+    ReaderTheme.GUNDUZ -> ReaderPaper(R.drawable.reader_paper_day, 0.18f)
+    ReaderTheme.GECE -> ReaderPaper(R.drawable.reader_paper_night, 0.22f)
+    ReaderTheme.SEPYA -> ReaderPaper(R.drawable.reader_paper_sepia, 0.18f)
 }
 
 /*
@@ -241,6 +255,10 @@ fun ReaderScreen(
     val themeColors = remember(readerTheme) {
         themeColorsFor(readerTheme)
     }
+    val readerPaper = remember(readerTheme) {
+        paperFor(readerTheme)
+    }
+    val readerPaperPainter = painterResource(readerPaper.drawableRes)
 
     /*
      * ==========================================
@@ -332,6 +350,12 @@ fun ReaderScreen(
                 .fillMaxSize()
                 .background(
                     themeColors.background
+                )
+                .paint(
+                    painter = readerPaperPainter,
+                    sizeToIntrinsics = false,
+                    contentScale = ContentScale.Crop,
+                    alpha = readerPaper.alpha
                 ),
             contentAlignment =
                 Alignment.Center
@@ -357,6 +381,12 @@ fun ReaderScreen(
             .fillMaxSize()
             .background(
                 themeColors.background
+            )
+            .paint(
+                painter = readerPaperPainter,
+                sizeToIntrinsics = false,
+                contentScale = ContentScale.Crop,
+                alpha = readerPaper.alpha
             )
             .statusBarsPadding()
             .navigationBarsPadding()

@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -49,20 +48,9 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("KÜTÜPHANE TEST", style = MaterialTheme.typography.titleLarge)
-                        Spacer(Modifier.width(SmoothSpacing.s))
-                        Text("▾", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    Text("Kütüphane", style = MaterialTheme.typography.titleLarge)
                 },
                 actions = {
-                    IconButton(onClick = { /* v1: sonra */ }) {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = "Ara",
-                            modifier = Modifier.size(SmoothIconSize.standard)
-                        )
-                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(
                             Icons.Default.Settings,

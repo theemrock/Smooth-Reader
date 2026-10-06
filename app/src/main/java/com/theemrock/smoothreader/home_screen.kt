@@ -18,7 +18,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -161,7 +160,7 @@ private fun LibraryBookCard(
                 Spacer(Modifier.height(6.dp))
                 Text(
                     book.type.name,
-                    color = typeColor(book.type),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -212,16 +211,5 @@ private fun LibraryBookCard(
                 )
             }
         }
-    }
-}
-
-private fun typeColor(t: BookType): Color {
-    return when (t) {
-        BookType.EPUB -> Color(0xFF2E7D32)
-        BookType.DOCX -> Color(0xFF1565C0)
-        BookType.DOC -> Color(0xFF0D47A1)
-        BookType.ODT -> Color(0xFFEF6C00)
-        BookType.RTF -> Color(0xFF6A1B9A)
-        BookType.TXT -> Color(0xFF546E7A)
     }
 }

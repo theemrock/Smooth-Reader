@@ -2,7 +2,6 @@ package com.theemrock.smoothreader
 
 object Routes {
     const val HOME = "home"
-    const val SETTINGS = "settings"
     const val RESUME = "resume" // resume/{bookId}
     const val READER = "reader" // reader/{bookId}?mode=READ|LISTEN
 }

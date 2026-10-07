@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,7 +25,6 @@ import com.theemrock.smoothreader.ui.theme.SmoothSpacing
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    onOpenSettings: () -> Unit,
     onOpenBook: (String) -> Unit,
     vm: HomeViewModel = viewModel()
 ) {
@@ -49,15 +47,6 @@ fun HomeScreen(
             TopAppBar(
                 title = {
                     Text("Kütüphane", style = MaterialTheme.typography.titleLarge)
-                },
-                actions = {
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(
-                            Icons.Default.Settings,
-                            contentDescription = "Ayarlar",
-                            modifier = Modifier.size(SmoothIconSize.standard)
-                        )
-                    }
                 }
             )
         },

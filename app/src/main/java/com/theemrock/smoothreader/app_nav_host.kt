@@ -17,13 +17,8 @@ fun AppNavHost() {
 
         composable(Routes.HOME) {
             HomeScreen(
-                onOpenSettings = { nav.navigate(Routes.SETTINGS) },
                 onOpenBook = { bookId -> nav.navigate(resumeRoute(bookId)) }
             )
-        }
-
-        composable(Routes.SETTINGS) {
-            PlaceholderScreen(title = "Ayarlar (yakında)") { nav.popBackStack() }
         }
 
         composable(

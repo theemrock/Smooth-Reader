@@ -64,7 +64,8 @@ class LibraryStore(private val context: Context) {
                 for (i in 0 until arr.length()) {
                     val o = arr.getJSONObject(i)
                     val author = o.optString("author").takeIf { it.isNotBlank() }
-                    val type = runCatching { BookType.valueOf(o.getString("type")) }.getOrElse { BookType.TXT }
+                    val type = runCatching { BookType.valueOf(o.getString("type")) }.getOrNull()
+                        ?: continue
                     add(
                         Book(
                             id = o.getString("id"),

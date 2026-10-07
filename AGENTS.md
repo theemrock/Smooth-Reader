@@ -19,8 +19,6 @@ Mevcut temel formatlar:
 - TXT
 - DOCX
 
-PDF import desteği ilerleyen ayrı bir görevde eklenecektir.
-
 ---
 
 ## 2. Temel Çalışma Yöntemi
@@ -265,14 +263,6 @@ Bu ayrımı koru.
 - TXT
 - DOCX
 
-PDF henüz desteklenmemektedir.
-
-PDF import ayrı ve açık bir görevle eklenecektir.
-
-PDF desteğinin amacı başlangıçta tam görsel PDF renderer oluşturmak değildir.
-
-Öncelik, uygun PDF belgelerinden okunabilir metin/paragraf çıkarıp mevcut Reader içerik zincirine beslemektir.
-
 Şimdilik desteklenmiş kabul edilmemesi gereken diğer formatlar:
 
 - eski binary DOC
@@ -288,9 +278,6 @@ Desteklenmeyen dosyayı sessizce TXT olarak yorumlama.
 
 Kullanıcı ayrıca görev vermedikçe aşağıdaki özellikleri kendiliğinden geliştirme:
 
-- PDF converter
-- PDF → EPUB
-- PDF → DOCX
 - DOCX → EPUB
 - text selection
 - bookmark
@@ -351,7 +338,7 @@ Reader bu ortak modeli kullanıcıya sunar.
 
 Format-specific ayrıntıları ReaderScreen içine taşıma.
 
-ReaderScreen'in EPUB/DOCX/TXT/PDF iç yapısını bilmesi gerekmemelidir.
+ReaderScreen'in EPUB/DOCX/TXT iç yapısını bilmesi gerekmemelidir.
 
 Yeni format desteğinde mümkün olduğunca ortak Reader modelini kullan.
 

@@ -449,7 +449,7 @@ private fun splitLongParagraph(
    DOCUMENT PARSER V1
    ========================================================= */
 
-class DocumentParserV1(private val pdfParser: DocumentParser? = null) : DocumentParser {
+class DocumentParserV1 : DocumentParser {
 
     private val txtParser =
         TxtParser()
@@ -483,9 +483,6 @@ class DocumentParserV1(private val pdfParser: DocumentParser? = null) : Document
             }
 
             BookType.DOCX -> docxParser.parse(book, contentResolver)
-
-            BookType.PDF -> pdfParser?.parse(book, contentResolver)
-                ?: ParseResult.Error("PDF ayrıştırıcı başlatılamadı.")
 
             BookType.DOC,
             BookType.ODT,

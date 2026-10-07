@@ -7,7 +7,6 @@ internal object ImportFileType {
         "application/epub+zip",
         "text/plain",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/pdf",
         // Some providers expose EPUB/DOCX as archives or generic binary files.
         "application/zip",
         "application/x-zip-compressed",
@@ -22,7 +21,6 @@ internal object ImportFileType {
             "epub" -> BookType.EPUB
             "txt" -> BookType.TXT
             "docx" -> BookType.DOCX
-            "pdf" -> BookType.PDF
             else -> null
         }
         // An explicit unknown/unsupported extension must not become TXT via MIME.
@@ -31,7 +29,6 @@ internal object ImportFileType {
             "application/epub+zip" -> BookType.EPUB
             "text/plain" -> BookType.TXT
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> BookType.DOCX
-            "application/pdf" -> BookType.PDF
             null, "", "*/*", "application/octet-stream", "binary/octet-stream" -> return extensionType
             "application/zip", "application/x-zip-compressed" ->
                 return extensionType?.takeIf { it == BookType.EPUB || it == BookType.DOCX }

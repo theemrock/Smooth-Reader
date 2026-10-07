@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VolumeOff
@@ -907,7 +908,7 @@ fun ReaderScreen(
 
                         Spacer(
                             modifier =
-                                Modifier.height(8.dp)
+                                Modifier.height(2.dp)
                         )
 
                         Row(
@@ -915,11 +916,28 @@ fun ReaderScreen(
                                 Modifier.fillMaxWidth(),
 
                             horizontalArrangement =
-                                Arrangement.Center,
+                                Arrangement.SpaceEvenly,
 
                             verticalAlignment =
                                 Alignment.CenterVertically
                         ) {
+
+                            /*
+                             * HOME
+                             */
+                            IconButton(
+                                onClick = {
+                                    viewModel.stop()
+                                    onBack()
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Home,
+                                    contentDescription = "Ana sayfa",
+                                    tint = themeColors.text,
+                                    modifier = Modifier.size(30.dp)
+                                )
+                            }
 
                             IconButton(onClick = viewModel::toggleSound) {
                                 Icon(
@@ -930,7 +948,79 @@ fun ReaderScreen(
                                 )
                             }
 
-                            Spacer(modifier = Modifier.width(12.dp))
+                            /*
+                             * SLOW
+                             */
+                            IconButton(
+                                onClick = {
+                                    viewModel.slowDown()
+                                    showFastSpeed = false
+                                    showSlowSpeed = true
+                                }
+                            ) {
+                                if (showSlowSpeed) {
+                                    Text(
+                                        text = "%${state.speed * 10}",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = themeColors.text
+                                    )
+                                } else {
+                                    Text(
+                                        text = "🐢",
+                                        fontSize = 26.sp
+                                    )
+                                }
+                            }
+
+                            /*
+                             * PLAY / PAUSE
+                             */
+                            IconButton(
+                                onClick = {
+                                    viewModel.togglePlayPause()
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = if (state.isPlaying) {
+                                        Icons.Filled.Pause
+                                    } else {
+                                        Icons.Filled.PlayArrow
+                                    },
+                                    contentDescription = if (state.isPlaying) {
+                                        "Duraklat"
+                                    } else {
+                                        "Başlat"
+                                    },
+                                    tint = themeColors.text,
+                                    modifier = Modifier.size(34.dp)
+                                )
+                            }
+
+                            /*
+                             * FAST
+                             */
+                            IconButton(
+                                onClick = {
+                                    viewModel.speedUp()
+                                    showSlowSpeed = false
+                                    showFastSpeed = true
+                                }
+                            ) {
+                                if (showFastSpeed) {
+                                    Text(
+                                        text = "%${state.speed * 10}",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = themeColors.text
+                                    )
+                                } else {
+                                    Text(
+                                        text = "🐇",
+                                        fontSize = 26.sp
+                                    )
+                                }
+                            }
 
                             /*
                              * ==================================
@@ -965,7 +1055,7 @@ fun ReaderScreen(
                                                     Icons.Filled.LightMode
 
                                                 ReaderTheme.SEPYA ->
-                                                    Icons.Filled.FormatSize
+                                                    Icons.Filled.MenuBook
                                             },
 
                                         contentDescription =
@@ -1066,11 +1156,6 @@ fun ReaderScreen(
                                     )
                                 }
                             }
-
-                            Spacer(
-                                modifier =
-                                    Modifier.width(12.dp)
-                            )
 
                             /*
                              * ==================================
@@ -1186,195 +1271,7 @@ fun ReaderScreen(
                                 }
                             }
 
-                            Spacer(
-                                modifier =
-                                    Modifier.width(12.dp)
-                            )
-
                         }
-                    }
-
-                    /*
-                     * ==========================================
-                     * ANA KONTROLLER
-                     * ==========================================
-                     */
-                    Row(
-
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                top = 2.dp
-                            ),
-
-                        horizontalArrangement =
-                            Arrangement.Center,
-
-                        verticalAlignment =
-                            Alignment.CenterVertically
-                    ) {
-
-                        /*
-                         * HOME
-                         */
-                        IconButton(
-
-                            onClick = {
-
-                                viewModel.stop()
-
-                                onBack()
-                            }
-                        ) {
-
-                            Icon(
-
-                                imageVector =
-                                    Icons.Filled.Home,
-
-                                contentDescription =
-                                    "Ana sayfa",
-
-                                tint =
-                                    themeColors.text,
-
-                                modifier =
-                                    Modifier.size(30.dp)
-                            )
-                        }
-
-                        /*
-                         * YAVAŞ
-                         */
-                        IconButton(
-
-                            onClick = {
-
-                                viewModel.slowDown()
-
-                                showFastSpeed =
-                                    false
-
-                                showSlowSpeed =
-                                    true
-                            }
-                        ) {
-
-                            if (showSlowSpeed) {
-
-                                Text(
-
-                                    text =
-                                        "%${state.speed * 10}",
-
-                                    fontSize =
-                                        18.sp,
-
-                                    fontWeight =
-                                        FontWeight.Bold,
-
-                                    color =
-                                        themeColors.text
-                                )
-
-                            } else {
-
-                                Text(
-                                    text = "🐢",
-                                    fontSize = 26.sp
-                                )
-                            }
-                        }
-
-                        /*
-                         * PLAY / PAUSE
-                         */
-                        IconButton(
-
-                            onClick = {
-
-                                viewModel
-                                    .togglePlayPause()
-                            }
-                        ) {
-
-                            Icon(
-
-                                imageVector =
-                                    if (
-                                        state.isPlaying
-                                    ) {
-
-                                        Icons.Filled.Pause
-
-                                    } else {
-
-                                        Icons.Filled.PlayArrow
-                                    },
-
-                                contentDescription =
-                                    if (
-                                        state.isPlaying
-                                    ) {
-
-                                        "Duraklat"
-
-                                    } else {
-
-                                        "Başlat"
-                                    },
-
-                                tint =
-                                    themeColors.text,
-
-                                modifier =
-                                    Modifier.size(34.dp)
-                            )
-                        }
-
-                        /*
-                         * HIZLI
-                         */
-                        IconButton(
-
-                            onClick = {
-
-                                viewModel.speedUp()
-
-                                showSlowSpeed =
-                                    false
-
-                                showFastSpeed =
-                                    true
-                            }
-                        ) {
-
-                            if (showFastSpeed) {
-
-                                Text(
-
-                                    text =
-                                        "%${state.speed * 10}",
-
-                                    fontSize =
-                                        18.sp,
-
-                                    fontWeight =
-                                        FontWeight.Bold,
-
-                                    color =
-                                        themeColors.text
-                                )
-
-                            } else {
-
-                                Text(
-                                    text = "🐇",
-                                    fontSize = 26.sp
-                                )
-                            }
-                        }
-
                     }
                 }
             }

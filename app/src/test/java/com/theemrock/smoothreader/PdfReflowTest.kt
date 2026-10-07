@@ -16,6 +16,16 @@ class PdfReflowTest {
         assertEquals(listOf("first", "same row right", "second"), PdfReadingOrder.order(page).map { it.text })
     }
 
+    @Test fun geometricOrderingRemainsTransitiveAcrossOverlappingRows() {
+        val page = page(
+            line("top", 0, 300f, 100f),
+            line("middle", 1, 200f, 107f),
+            line("bottom", 2, 100f, 114f)
+        )
+
+        assertEquals(listOf("top", "middle", "bottom"), PdfReadingOrder.order(page).map { it.text })
+    }
+
     @Test fun rotatedPageStillUsesNormalizedCoordinates() {
         val page = page(
             line("below", 0, 20f, 80f),
@@ -58,6 +68,17 @@ class PdfReflowTest {
     @Test fun bodyNumbersArePreserved() {
         val result = normalize(page(line("2024 yılında 42 deney yapıldı.", 0, 40f, 300f)))
         assertEquals(listOf("2024 yılında 42 deney yapıldı."), result.paragraphs)
+    }
+
+    @Test fun standaloneTableOfContentsPageNumberAtRightMarginIsSuppressed() {
+        val result = normalize(
+            page(
+                line("Chapter title", 0, 40f, 160f, right = 220f),
+                line("111", 1, 550f, 162f, right = 570f)
+            )
+        )
+
+        assertEquals(listOf("Chapter title"), result.paragraphs)
     }
 
     @Test fun softHyphenAndStrongWrapHyphenJoinButCompoundHyphenStays() {

@@ -61,15 +61,11 @@ data class PdfNormalizationResult(
 )
 
 object PdfReadingOrder {
-    fun order(page: PdfExtractedPage): List<PdfTextLine> = page.lines.sortedWith { first, second ->
-        val tolerance = max(first.bounds.height, second.bounds.height).coerceAtLeast(1f) * 0.5f
-        if (abs(first.bounds.top - second.bounds.top) <= tolerance) {
-            first.bounds.left.compareTo(second.bounds.left).takeIf { it != 0 }
-                ?: first.sourceOrder.compareTo(second.sourceOrder)
-        } else {
-            first.bounds.top.compareTo(second.bounds.top)
-        }
-    }
+    fun order(page: PdfExtractedPage): List<PdfTextLine> = page.lines.sortedWith(
+        compareBy<PdfTextLine> { it.bounds.top }
+            .thenBy { it.bounds.left }
+            .thenBy { it.sourceOrder }
+    )
 }
 
 object PdfCapabilities {
@@ -187,7 +183,9 @@ class PdfReflowNormalizer {
 
     private fun isPageNumber(line: PdfTextLine, page: PdfExtractedPage): Boolean {
         val inBand = line.bounds.top <= page.height * 0.10f || line.bounds.bottom >= page.height * 0.90f
-        return inBand && line.text.trim().matches(Regex("(?i)^(?:\\d{1,4}|[ivxlcdm]{1,8})$"))
+        val atRightMargin = line.bounds.right >= page.width * 0.90f
+        return (inBand || atRightMargin) &&
+            line.text.trim().matches(Regex("(?i)^(?:\\d{1,4}|[ivxlcdm]{1,8})$"))
     }
 
     private fun repeatedTopBandLines(pages: List<PdfExtractedPage>): Set<PdfTextLine> {

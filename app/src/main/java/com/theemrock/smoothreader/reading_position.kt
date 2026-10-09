@@ -183,4 +183,16 @@ internal class ReadingSession(
         if (pages.isNotEmpty()) pageIndex = pageForPosition(pages, safe)
         return changed
     }
+
+    fun acceptExactWindow(newPages: List<ReadingPage>, index: Int, exactPosition: ReadingPosition): Boolean {
+        if (index !in newPages.indices || newPages.isEmpty()) return false
+        val page = newPages[index]
+        val safe = source.clamp(exactPosition)
+        if (comparePositions(safe, page.start) < 0 || comparePositions(safe, page.end) >= 0) return false
+        if (!acceptWindow(newPages)) return false
+        cancelLegacy()
+        pageIndex = index
+        position = safe
+        return true
+    }
 }

@@ -50,6 +50,7 @@ data class ReaderUiState(
     val isPlaying: Boolean = false,
     val isSoundEnabled: Boolean = true,
     val speed: Int = 5,
+    val canonicalPosition: ReadingPosition? = null,
 )
 
 class ReaderViewModel(app: Application) : AndroidViewModel(app) {
@@ -71,7 +72,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     private var emptySeekDirection = 1
     private var readyTicket: PaginationTicket? = null
     private var queuedDirection: Int? = null
-    private data class PageRequest(val block: Int, val index: Int) // -1 means last page
+    private data class PageRequest(val block: Int, val index: Int, val exactPosition: ReadingPosition? = null) // -1 means last page
     private var pageRequest: PageRequest? = null
 
     private var currentBookId: String? = null
@@ -110,6 +111,41 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         val spokenStart: Int
     )
     private var spokenPage: SpokenPage? = null
+
+    private data class SpokenChunk(
+        val generation: Long,
+        val session: ReadingSession,
+        val range: SentenceRange,
+        val text: String
+    )
+    private var spokenChunk: SpokenChunk? = null
+
+    private fun speakChunk(
+        chunk: Pair<SentenceRange, String>,
+        requestedGeneration: Long? = null
+    ) {
+        if (!ttsReady || !_state.value.isPlaying) return
+        val (range, text) = chunk
+        if (text.isEmpty()) return
+        val session = readingSession ?: return
+        if (requestedGeneration != null && requestedGeneration != speechGeneration) return
+
+        val generation = requestedGeneration ?: ++speechGeneration
+
+        spokenChunk = SpokenChunk(generation, session, range, text)
+
+        applyTtsRate()
+
+        val params = Bundle().apply {
+            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, utteranceVolume(_state.value.isSoundEnabled))
+        }
+        tts?.speak(
+            text,
+            TextToSpeech.QUEUE_FLUSH,
+            params,
+            "reader_$generation"
+        )
+    }
 
     init {
 
@@ -402,6 +438,13 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun publishWindow(engine: WindowPaginator, session: ReadingSession) {
         if (!paginationEpoch.accepts(engine.ticket) || readingSession !== session) return
+
+        val req = pageRequest
+        if (req != null && req.exactPosition != null &&
+            req.exactPosition != session.position) {
+            pageRequest = null
+        }
+
         val legacy = session.pendingLegacyPage()?.takeIf { it >= 0 }
         if (legacy != null) {
             val location = engine.locateGlobal(legacy)
@@ -421,24 +464,47 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         val request = pageRequest
         if (request != null) {
             val block = engine.block(request.block)
-            val index = if (request.index < 0 && block?.complete == true) block.pages.lastIndex else request.index
-            if (block != null && index in block.pages.indices) {
-                val changed = session.navigateWindow(block.pages.toList(), index)
-                activeBlock = request.block
-                engine.focus = activeBlock
-                engine.demand = null
-                pageRequest = null
-                readyTicket = engine.ticket
-                if (changed) persistProgress(session, session.position)
-            } else if (block?.complete == true && block.pages.isEmpty()) {
-                val next = request.block + if (request.index < 0) -1 else 1
-                if (next in 0 until engine.blockCount) {
-                    pageRequest = PageRequest(next, request.index)
-                    engine.demand = next
-                } else {
-                    pageRequest = null
+            if (request.exactPosition != null) {
+                if (block?.complete == true && block.pages.isNotEmpty()) {
+                    val index = pageForPosition(block.pages, request.exactPosition)
+                    val page = block.pages.getOrNull(index)
+                    if (page != null &&
+                        comparePositions(request.exactPosition, page.start) >= 0 &&
+                        comparePositions(request.exactPosition, page.end) < 0 &&
+                        request.exactPosition == session.position &&
+                        session.acceptExactWindow(block.pages.toList(), index, request.exactPosition)) {
+                        activeBlock = request.block
+                        engine.focus = activeBlock
+                        engine.demand = null
+                        pageRequest = null
+                        readyTicket = engine.ticket
+                        persistProgress(session, session.position)
+                    } else {
+                        pageRequest = null
+                        engine.demand = null
+                        _state.value = _state.value.copy(isPreparingPages = false)
+                    }
+                }
+            } else {
+                val index = if (request.index < 0 && block?.complete == true) block.pages.lastIndex else request.index
+                if (block != null && index in block.pages.indices) {
+                    val changed = session.navigateWindow(block.pages.toList(), index)
+                    activeBlock = request.block
+                    engine.focus = activeBlock
                     engine.demand = null
-                    if (request.index >= 0) stop()
+                    pageRequest = null
+                    readyTicket = engine.ticket
+                    if (changed) persistProgress(session, session.position)
+                } else if (block?.complete == true && block.pages.isEmpty()) {
+                    val next = request.block + if (request.index < 0) -1 else 1
+                    if (next in 0 until engine.blockCount) {
+                        pageRequest = PageRequest(next, request.index)
+                        engine.demand = next
+                    } else {
+                        pageRequest = null
+                        engine.demand = null
+                        if (request.index >= 0) stop()
+                    }
                 }
             }
         }
@@ -484,7 +550,8 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                 session.source.offsetOf(session.position).toFloat() / session.source.length,
             isPreparingPages = pageRequest != null,
             activeSentenceStart = activeSentence?.localStart ?: -1,
-            activeSentenceEnd = activeSentence?.localEnd ?: -1
+            activeSentenceEnd = activeSentence?.localEnd ?: -1,
+            canonicalPosition = session.position
         )
         if (automaticTransitionPending && nextPageText != null) {
             automaticTransitionPending = false
@@ -884,17 +951,48 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun updateActivePosition(position: ReadingPosition) {
         val session = readingSession ?: return
-        val page = session.pages.getOrNull(session.pageIndex) ?: return
-        if (comparePositions(position, page.start) < 0 || comparePositions(position, page.end) >= 0) return
-        if (session.updatePosition(position)) persistProgress(session, session.position)
+        val engine = paginator ?: return
+
+        val changed = session.updatePosition(position)
+        if (changed) persistProgress(session, session.position)
+
+        val page = session.pages.getOrNull(session.pageIndex)
+        val isInsidePage = page != null &&
+            comparePositions(session.position, page.start) >= 0 &&
+            comparePositions(session.position, page.end) < 0
+
+        if (!isInsidePage) {
+            _state.value = _state.value.copy(
+                activeSentenceStart = -1,
+                activeSentenceEnd = -1,
+                readingFraction = if (session.source.length == 0) 0f else
+                    session.source.offsetOf(session.position).toFloat() / session.source.length,
+                canonicalPosition = session.position
+            )
+
+            if (!changed || (pageRequest != null && pageRequest?.exactPosition == null) || engine.blockCount <= 0) {
+                return
+            }
+
+            if (pageRequest?.exactPosition == session.position) return
+
+            val blockIdx = engine.blockAt(session.position).coerceIn(0, engine.blockCount - 1)
+            pageRequest = PageRequest(blockIdx, -1, exactPosition = session.position)
+            engine.demand = blockIdx
+            _state.value = _state.value.copy(isPreparingPages = true)
+            paginationWake.trySend(Unit)
+            return
+        }
+
         val active = sentenceRanges(session.source, page).firstOrNull {
-            comparePositions(it.start, position) <= 0 && comparePositions(position, it.end) < 0
+            comparePositions(it.start, session.position) <= 0 && comparePositions(session.position, it.end) < 0
         }
         _state.value = _state.value.copy(
             activeSentenceStart = active?.localStart ?: -1,
             activeSentenceEnd = active?.localEnd ?: -1,
             readingFraction = if (session.source.length == 0) 0f else
-                session.source.offsetOf(session.position).toFloat() / session.source.length
+                session.source.offsetOf(session.position).toFloat() / session.source.length,
+            canonicalPosition = session.position
         )
     }
 

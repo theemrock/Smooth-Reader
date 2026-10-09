@@ -221,3 +221,23 @@ internal class ProgressionTokenGate {
         LayoutTransitionToken(contentVersion, layout.generation + 1).also { layout = it }
     fun acceptsLayout(token: LayoutTransitionToken): Boolean = token == layout
 }
+
+internal fun nextReadingChunk(source: ReadingSource, currentPosition: ReadingPosition): Pair<SentenceRange, String>? {
+    if (source.paragraphs.isEmpty()) return null
+    val clamped = source.clamp(currentPosition)
+    var pIndex = clamped.paragraphIndex
+    while (pIndex in source.paragraphs.indices) {
+        val sentences = paragraphSentences(source, pIndex)
+        for (sentence in sentences) {
+            if (comparePositions(sentence.end, clamped) > 0) {
+                val effectiveStart = if (comparePositions(sentence.start, clamped) < 0) clamped else sentence.start
+                val text = source.slice(source.offsetOf(effectiveStart), source.offsetOf(sentence.end))
+                if (text.isNotBlank()) {
+                    return SentenceRange(effectiveStart, sentence.end) to text
+                }
+            }
+        }
+        pIndex++
+    }
+    return null
+}

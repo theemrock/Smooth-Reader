@@ -99,6 +99,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     private var playbackPreparation: PlaybackPreparation? = null
     private var playbackBinder: ReaderPlaybackService.LocalBinder? = null
     private var playbackStateJob: Job? = null
+    private var playbackStoppingJob: Job? = null
     private var playbackBound = false
     private var cleared = false
     private val playbackConnection = object : ServiceConnection {
@@ -110,12 +111,22 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
             playbackStateJob = viewModelScope.launch {
                 binder.state.collect(::applyPlaybackSnapshot)
             }
+            playbackStoppingJob?.cancel()
+            playbackStoppingJob = viewModelScope.launch {
+                binder.stopping.collect { serviceStopping ->
+                    if (serviceStopping && playbackBindingState.serviceStopping()) {
+                        disconnectPlaybackService()
+                    }
+                }
+            }
             applyPlaybackConnection()
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             playbackStateJob?.cancel()
             playbackStateJob = null
+            playbackStoppingJob?.cancel()
+            playbackStoppingJob = null
             playbackBinder = null
             playbackBound = false
         }
@@ -136,7 +147,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun applyPlaybackConnection() {
         val binder = playbackBinder ?: return
-        val actions = playbackBindingState.connected(binder.state.value.bookId)
+        val actions = playbackBindingState.connected(binder.state.value)
         actions.preparation?.let { preparation ->
             binder.prepareSession(
                 preparation.bookId,
@@ -147,11 +158,24 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                 preparation.mode
             )
         }
+        actions.snapshotToApply?.let(::applyPlaybackSnapshot)
         if (actions.startPlayback) {
             ContextCompat.startForegroundService(
                 appContext,
                 ReaderPlaybackService.actionIntent(appContext, ReaderPlaybackService.ACTION_PLAY)
             )
+        }
+    }
+
+    private fun disconnectPlaybackService() {
+        playbackStateJob?.cancel()
+        playbackStateJob = null
+        playbackStoppingJob?.cancel()
+        playbackStoppingJob = null
+        playbackBinder = null
+        if (playbackBound) {
+            appContext.unbindService(playbackConnection)
+            playbackBound = false
         }
     }
 
@@ -748,9 +772,13 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun exitReader() {
-        playbackBinder?.stop("readerExit") ?: appContext.stopService(
-            Intent(appContext, ReaderPlaybackService::class.java)
-        )
+        val binder = playbackBinder
+        if (binder != null) {
+            binder.stop("readerExit")
+            disconnectPlaybackService()
+        } else {
+            appContext.stopService(Intent(appContext, ReaderPlaybackService::class.java))
+        }
     }
 
     /*
@@ -760,13 +788,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
      */
     override fun onCleared() {
         cleared = true
-        playbackStateJob?.cancel()
-        playbackStateJob = null
-        playbackBinder = null
-        if (playbackBound) {
-            appContext.unbindService(playbackConnection)
-            playbackBound = false
-        }
+        disconnectPlaybackService()
         TtsDiagnostics.log("ReaderViewModel onCleared | playback ownership remains with service")
         super.onCleared()
     }

@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -54,6 +55,9 @@ class ReaderPlaybackService : Service() {
     internal inner class LocalBinder : Binder() {
         val state: StateFlow<PlaybackSnapshot>
             get() = controller.state
+
+        val stopping: StateFlow<Boolean>
+            get() = stoppingState
 
         fun hasSession(bookId: String): Boolean = controller.hasSession(bookId)
 
@@ -108,6 +112,7 @@ class ReaderPlaybackService : Service() {
     private lateinit var mediaSession: MediaSession
     private lateinit var audioFocus: AndroidPlaybackAudioFocus
     private lateinit var notificationManager: NotificationManager
+    private val stoppingState = MutableStateFlow(false)
     private var metadata: PlaybackBookMetadata? = null
     private var foregroundStarted = false
     private var stopping = false
@@ -168,7 +173,7 @@ class ReaderPlaybackService : Service() {
     }
 
     override fun onDestroy() {
-        audioFocus.abandonPlaybackFocus()
+        coordinator.pause("serviceDestroy")
         removeForeground()
         mediaSession.isActive = false
         mediaSession.release()
@@ -180,6 +185,7 @@ class ReaderPlaybackService : Service() {
     private fun requestStop(reason: String) {
         if (stopping) return
         stopping = true
+        stoppingState.value = true
         coordinator.stop(reason)
     }
 

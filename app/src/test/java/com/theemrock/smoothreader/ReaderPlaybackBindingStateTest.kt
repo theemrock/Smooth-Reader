@@ -20,20 +20,29 @@ class ReaderPlaybackBindingStateTest {
         val state = ReaderPlaybackBindingState()
         state.updatePreparation(preparation())
 
-        val actions = state.connected(activeBookId = "book")
+        val paused = PlaybackSnapshot(
+            bookId = "book",
+            position = ReadingPosition(0, 9),
+            isPlaying = false,
+            isSoundEnabled = false,
+            speed = 7
+        )
+
+        val actions = state.connected(paused)
 
         assertNull(actions.preparation)
         assertFalse(actions.startPlayback)
+        assertEquals(paused, actions.snapshotToApply)
     }
 
     @Test fun pendingPlayWaitsForPreparationAndIsConsumedOnce() {
         val state = ReaderPlaybackBindingState()
         state.requestPlay()
 
-        val tooEarly = state.connected(activeBookId = null)
+        val tooEarly = state.connected(PlaybackSnapshot())
         state.updatePreparation(preparation())
-        val ready = state.connected(activeBookId = null)
-        val repeated = state.connected(activeBookId = "book")
+        val ready = state.connected(PlaybackSnapshot())
+        val repeated = state.connected(PlaybackSnapshot(bookId = "book", isPlaying = true))
 
         assertNull(tooEarly.preparation)
         assertFalse(tooEarly.startPlayback)
@@ -41,15 +50,45 @@ class ReaderPlaybackBindingStateTest {
         assertTrue(ready.startPlayback)
         assertNull(repeated.preparation)
         assertFalse(repeated.startPlayback)
+        assertTrue(repeated.snapshotToApply?.isPlaying == true)
+    }
+
+    @Test fun playingSessionReconnectRequestsImmediateSnapshotProjection() {
+        val state = ReaderPlaybackBindingState()
+        state.updatePreparation(preparation())
+        val playing = PlaybackSnapshot(
+            bookId = "book",
+            position = ReadingPosition(0, 12),
+            isPlaying = true,
+            speed = 8
+        )
+
+        val actions = state.connected(playing)
+
+        assertEquals(playing, actions.snapshotToApply)
+        assertFalse(actions.startPlayback)
     }
 
     @Test fun differentBookConnectionPreparesReplacementWithoutAutoplay() {
         val state = ReaderPlaybackBindingState()
         state.updatePreparation(preparation(bookId = "second"))
 
-        val actions = state.connected(activeBookId = "first")
+        val actions = state.connected(PlaybackSnapshot(bookId = "first"))
 
         assertEquals("second", actions.preparation?.bookId)
         assertFalse(actions.startPlayback)
+    }
+
+    @Test fun serviceStopDisconnectsClientAndNextPlayUsesFreshService() {
+        val state = ReaderPlaybackBindingState()
+        state.updatePreparation(preparation())
+        state.requestPlay()
+
+        assertTrue(state.serviceStopping())
+
+        state.requestPlay()
+        val freshConnection = state.connected(PlaybackSnapshot())
+        assertEquals("book", freshConnection.preparation?.bookId)
+        assertTrue(freshConnection.startPlayback)
     }
 }

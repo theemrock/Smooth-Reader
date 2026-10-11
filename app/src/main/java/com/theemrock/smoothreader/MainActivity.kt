@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
             SmoothAppTheme {
                 AppNavHost(
                     playbackOpenRequest = playbackOpenRequest.value,
-                    onPlaybackOpenConsumed = { playbackOpenRequest.value = null }
+                    onPlaybackOpenConsumed = ::consumePlaybackOpenRequest
                 )
             }
         }
@@ -62,6 +62,12 @@ class MainActivity : ComponentActivity() {
             ?.let { runCatching { ReadingMode.valueOf(it) }.getOrNull() }
             ?: ReadingMode.LISTEN
         return PlaybackOpenRequest(bookId, mode)
+    }
+
+    private fun consumePlaybackOpenRequest() {
+        playbackOpenRequest.value = null
+        intent?.removeExtra(ReaderPlaybackService.EXTRA_BOOK_ID)
+        intent?.removeExtra(ReaderPlaybackService.EXTRA_READING_MODE)
     }
 
     override fun onStart() {

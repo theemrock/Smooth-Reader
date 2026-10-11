@@ -11,7 +11,8 @@ internal data class PlaybackPreparation(
 
 internal data class PlaybackConnectionActions(
     val preparation: PlaybackPreparation?,
-    val startPlayback: Boolean
+    val startPlayback: Boolean,
+    val snapshotToApply: PlaybackSnapshot?
 )
 
 internal class ReaderPlaybackBindingState {
@@ -26,12 +27,22 @@ internal class ReaderPlaybackBindingState {
         playRequested = true
     }
 
-    fun connected(activeBookId: String?): PlaybackConnectionActions {
+    fun connected(activeSnapshot: PlaybackSnapshot): PlaybackConnectionActions {
         val pending = preparation
+        val activeBookId = activeSnapshot.bookId
         val prepare = pending?.takeIf { it.bookId != activeBookId }
         val sessionReady = pending != null && (activeBookId == pending.bookId || prepare != null)
         val start = playRequested && sessionReady
         if (start) playRequested = false
-        return PlaybackConnectionActions(prepare, start)
+        return PlaybackConnectionActions(
+            preparation = prepare,
+            startPlayback = start,
+            snapshotToApply = activeSnapshot.takeIf { pending != null && it.bookId == pending.bookId }
+        )
+    }
+
+    fun serviceStopping(): Boolean {
+        playRequested = false
+        return true
     }
 }

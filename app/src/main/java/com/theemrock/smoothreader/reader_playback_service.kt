@@ -28,7 +28,8 @@ import kotlinx.coroutines.launch
 internal data class PlaybackBookMetadata(
     val bookId: String,
     val title: String,
-    val author: String?
+    val author: String?,
+    val mode: ReadingMode
 )
 
 class ReaderPlaybackService : Service() {
@@ -37,6 +38,7 @@ class ReaderPlaybackService : Service() {
         const val ACTION_PAUSE = "com.theemrock.smoothreader.playback.PAUSE"
         const val ACTION_STOP = "com.theemrock.smoothreader.playback.STOP"
         const val EXTRA_BOOK_ID = "reader_playback_book_id"
+        const val EXTRA_READING_MODE = "reader_playback_reading_mode"
 
         private const val CHANNEL_ID = "reader_playback"
         private const val NOTIFICATION_ID = 1010
@@ -60,12 +62,29 @@ class ReaderPlaybackService : Service() {
             source: ReadingSource,
             initialPosition: ReadingPosition,
             title: String,
-            author: String?
+            author: String?,
+            mode: ReadingMode
         ): Boolean {
-            metadata = PlaybackBookMetadata(bookId, title.ifBlank { "Kitap" }, author?.takeIf { it.isNotBlank() })
+            metadata = PlaybackBookMetadata(
+                bookId,
+                title.ifBlank { "Kitap" },
+                author?.takeIf { it.isNotBlank() },
+                mode
+            )
             val prepared = controller.prepare(bookId, source, initialPosition)
             publish(controller.state.value)
             return prepared
+        }
+
+        fun updateMetadata(bookId: String, title: String, author: String?, mode: ReadingMode) {
+            if (!controller.hasSession(bookId)) return
+            metadata = PlaybackBookMetadata(
+                bookId,
+                title.ifBlank { "Kitap" },
+                author?.takeIf { it.isNotBlank() },
+                mode
+            )
+            publish(controller.state.value)
         }
 
         fun clear(reason: String) = controller.clear(reason)
@@ -206,7 +225,10 @@ class ReaderPlaybackService : Service() {
             REQUEST_CONTENT,
             Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                metadata?.bookId?.let { putExtra(EXTRA_BOOK_ID, it) }
+                metadata?.let {
+                    putExtra(EXTRA_BOOK_ID, it.bookId)
+                    putExtra(EXTRA_READING_MODE, it.mode.name)
+                }
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

@@ -18,8 +18,7 @@ import com.theemrock.smoothreader.ui.theme.SmoothSpacing
 fun ResumeScreen(
     bookId: String,
     onBack: () -> Unit,
-    onRead: (String) -> Unit,
-    onListen: (String) -> Unit,
+    onContinue: (String) -> Unit,
     vm: ResumeViewModel = viewModel()
 ) {
     val state by vm.uiState.collectAsState()
@@ -128,20 +127,12 @@ fun ResumeScreen(
 
                     Spacer(Modifier.height(SmoothSpacing.l))
 
-                    // Alt butonlar
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(SmoothSpacing.m)
+                    // Alt buton (Devam Et)
+                    Button(
+                        onClick = { onContinue(bookId) },
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Button(
-                            onClick = { onRead(bookId) },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Oku", style = MaterialTheme.typography.labelLarge) }
-
-                        Button(
-                            onClick = { onListen(bookId) },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Dinle", style = MaterialTheme.typography.labelLarge) }
+                        Text("Devam Et", style = MaterialTheme.typography.labelLarge)
                     }
                 }
             }

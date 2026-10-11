@@ -1,5 +1,6 @@
 package com.theemrock.smoothreader
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -166,6 +167,11 @@ fun ReaderScreen(
 
     val state by viewModel.uiState.collectAsState()
     val latestState by rememberUpdatedState(state)
+    val exitReader = {
+        viewModel.exitReader()
+        onBack()
+    }
+    BackHandler(onBack = exitReader)
 
     /*
      * ==========================================
@@ -926,10 +932,7 @@ fun ReaderScreen(
                              * HOME
                              */
                             IconButton(
-                                onClick = {
-                                    viewModel.stop()
-                                    onBack()
-                                }
+                                onClick = exitReader
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Home,

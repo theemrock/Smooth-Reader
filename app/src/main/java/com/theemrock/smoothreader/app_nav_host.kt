@@ -1,6 +1,7 @@
 package com.theemrock.smoothreader
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -10,8 +11,26 @@ import androidx.navigation.navArgument
 
 
 @Composable
-fun AppNavHost() {
+internal fun AppNavHost(
+    playbackOpenRequest: PlaybackOpenRequest? = null,
+    onPlaybackOpenConsumed: () -> Unit = {}
+) {
     val nav = rememberNavController()
+
+    LaunchedEffect(playbackOpenRequest) {
+        val request = playbackOpenRequest ?: return@LaunchedEffect
+        val current = nav.currentBackStackEntry
+        val currentBookId = current?.arguments?.getString("bookId")
+        val alreadyShowingBook =
+            current?.destination?.route?.startsWith("${Routes.READER}/") == true &&
+                currentBookId == request.bookId
+        if (!alreadyShowingBook) {
+            nav.navigate(readerRoute(request.bookId, request.mode)) {
+                launchSingleTop = true
+            }
+        }
+        onPlaybackOpenConsumed()
+    }
 
     NavHost(navController = nav, startDestination = Routes.HOME) {
 
@@ -27,11 +46,12 @@ fun AppNavHost() {
         ) { backStackEntry ->
             val bookId = backStackEntry.arguments?.getString("bookId").orEmpty()
             ResumeScreen(
-                bookId = bookId,
-                onBack = { nav.popBackStack() },
-                onRead = { id -> nav.navigate(readerRoute(id, ReadingMode.READ)) },
-                onListen = { id -> nav.navigate(readerRoute(id, ReadingMode.LISTEN)) }
-            )
+                 bookId = bookId,
+    onBack = { nav.popBackStack() },
+    onContinue = { id ->
+        nav.navigate(readerRoute(id, ReadingMode.READ))
+    }
+)
         }
 
         composable(

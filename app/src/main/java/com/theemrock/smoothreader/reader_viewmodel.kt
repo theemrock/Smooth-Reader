@@ -1,10 +1,13 @@
 package com.theemrock.smoothreader
 
 import android.app.Application
-import android.os.Bundle
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
 import android.provider.OpenableColumns
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,7 +15,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.NonCancellable
@@ -25,6 +27,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 
 data class ReaderUiState(
     val isLoading: Boolean = true,
@@ -55,6 +58,10 @@ data class ReaderUiState(
 
 class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
+    private data class ReaderBookMetadata(val title: String, val author: String?) {
+        val header: String = if (author == null) title else "$title · $author"
+    }
+
     private val _state = MutableStateFlow(ReaderUiState())
     val uiState: StateFlow<ReaderUiState> = _state.asStateFlow()
 
@@ -76,6 +83,8 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     private var pageRequest: PageRequest? = null
 
     private var currentBookId: String? = null
+    private var currentMode: ReadingMode = ReadingMode.READ
+    private var currentMetadata = ReaderBookMetadata("Kitap", null)
     private var verticalTransitionGeneration = 0L
     private var automaticTransitionPending = false
 
@@ -85,200 +94,64 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
      */
     private var currentPageText: String = ""
 
-    /*
-     * TTS
-     */
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
-
-    /*
-     * TTS'nin gerçekten konuştuğu sayfa.
-     *
-     * Bu değer sayesinde eski bir TTS callback'i
-     * yeni sayfayı yanlışlıkla ilerletemez.
-     */
-
-    /*
-     * Kullanıcı manuel sayfa değiştirdiğinde
-     * eski TTS callback'inin sayfa ilerletmesini
-     * engellemek için nesil numarası.
-     */
-    private var speechGeneration = 0L
-    private data class SpokenPage(
-        val generation: Long,
-        val pageIndex: Int,
-        val pageStartOffset: Int,
-        val spokenStart: Int
-    )
-    private var spokenPage: SpokenPage? = null
-
-    private data class SpokenChunk(
-        val generation: Long,
-        val session: ReadingSession,
-        val range: SentenceRange,
-        val text: String
-    )
-    private var spokenChunk: SpokenChunk? = null
-
-    private fun speakChunk(
-        chunk: Pair<SentenceRange, String>,
-        requestedGeneration: Long? = null
-    ) {
-        if (!ttsReady || !_state.value.isPlaying) return
-        val (range, text) = chunk
-        if (text.isEmpty()) return
-        val session = readingSession ?: return
-        if (requestedGeneration != null && requestedGeneration != speechGeneration) return
-
-        val generation = requestedGeneration ?: ++speechGeneration
-
-        spokenChunk = SpokenChunk(generation, session, range, text)
-
-        applyTtsRate()
-
-        val params = Bundle().apply {
-            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, utteranceVolume(_state.value.isSoundEnabled))
+    private val appContext = app.applicationContext
+    private val playbackBindingState = ReaderPlaybackBindingState()
+    private var playbackPreparation: PlaybackPreparation? = null
+    private var playbackBinder: ReaderPlaybackService.LocalBinder? = null
+    private var playbackStateJob: Job? = null
+    private var playbackBound = false
+    private var cleared = false
+    private val playbackConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            if (cleared) return
+            val binder = service as? ReaderPlaybackService.LocalBinder ?: return
+            playbackBinder = binder
+            playbackStateJob?.cancel()
+            playbackStateJob = viewModelScope.launch {
+                binder.state.collect(::applyPlaybackSnapshot)
+            }
+            applyPlaybackConnection()
         }
-        tts?.speak(
-            text,
-            TextToSpeech.QUEUE_FLUSH,
-            params,
-            "reader_$generation"
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            playbackStateJob?.cancel()
+            playbackStateJob = null
+            playbackBinder = null
+            playbackBound = false
+        }
+
+        override fun onBindingDied(name: ComponentName?) {
+            onServiceDisconnected(name)
+        }
+    }
+
+    private fun ensurePlaybackBound() {
+        if (cleared || playbackBound) return
+        playbackBound = appContext.bindService(
+            Intent(appContext, ReaderPlaybackService::class.java),
+            playbackConnection,
+            Context.BIND_AUTO_CREATE
         )
     }
 
-    init {
-
-        tts = TextToSpeech(
-            getApplication()
-        ) { status ->
-
-            if (status == TextToSpeech.SUCCESS) {
-
-                tts?.language = Locale("tr", "TR")
-
-                tts?.setOnUtteranceProgressListener(
-                    object : UtteranceProgressListener() {
-
-                        override fun onStart(
-                            utteranceId: String?
-                        ) {
-                            // TTS başladı.
-                        }
-
-                        override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
-                            val spoken = spokenPage ?: return
-                            if (utteranceId != "reader_${spoken.generation}" ||
-                                spoken.generation != speechGeneration) return
-                            viewModelScope.launch {
-                                val session = readingSession ?: return@launch
-                                if (!_state.value.isPlaying ||
-                                    spoken.generation != speechGeneration) return@launch
-                                val sourceOffset = spoken.pageStartOffset + spoken.spokenStart + start
-                                updateActivePosition(session.source.positionAt(sourceOffset))
-                            }
-                        }
-
-                        override fun onDone(
-                            utteranceId: String?
-                        ) {
-                            val spoken = spokenPage ?: return
-                            if (utteranceId != "reader_${spoken.generation}" ||
-                                spoken.generation != speechGeneration) return
-
-                            /*
-                             * Callback TTS thread'inden gelir.
-                             * UI/state değişikliğini ViewModel scope'una
-                             * taşıyoruz.
-                             */
-                            viewModelScope.launch {
-
-                                /*
-                                 * O sırada hâlâ Play açık mı?
-                                 */
-                                if (
-                                    !_state.value.isPlaying ||
-                                    spoken.generation != speechGeneration
-                                ) {
-                                    return@launch
-                                }
-
-                                /*
-                                 * TTS'nin bitirdiği sayfa hâlâ
-                                 * ekrandaki sayfa mı?
-                                 */
-                                if (
-                                    spoken.pageIndex !=
-                                    _state.value.pageIndex
-                                ) {
-                                    return@launch
-                                }
-
-                                /*
-                                 * Son sayfadaysak dur.
-                                 */
-                                if (
-                                    _state.value.totalPages > 0 &&
-                                    _state.value.pageIndex >=
-                                    _state.value.totalPages - 1
-                                ) {
-
-                                    stop()
-
-                                    return@launch
-                                }
-
-                                /*
-                                 * TTS gerçekten bitti.
-                                 * Şimdi sonraki sayfaya geç.
-                                 */
-                                requestAutomaticNextPage()
-                            }
-                        }
-
-                        override fun onError(
-                            utteranceId: String?
-                        ) {
-
-                            if (
-                                utteranceId != "reader_page"
-                            ) {
-                                return
-                            }
-
-                            /*
-                             * Hata durumunda da uygulama
-                             * kilitlenmesin.
-                             *
-                             * Sayfa otomatik ilerletilmiyor.
-                             * Kullanıcı Play/Pause ile tekrar
-                             * deneyebilir.
-                             */
-                        }
-
-                        override fun onError(
-                            utteranceId: String?,
-                            errorCode: Int
-                        ) {
-
-                            if (
-                                utteranceId != "reader_page"
-                            ) {
-                                return
-                            }
-
-                            /*
-                             * TTS hata verdiğinde burada
-                             * sessizce bekliyoruz.
-                             */
-                        }
-                    }
-                )
-
-                ttsReady = true
-
-                applyTtsRate()
-            }
+    private fun applyPlaybackConnection() {
+        val binder = playbackBinder ?: return
+        val actions = playbackBindingState.connected(binder.state.value.bookId)
+        actions.preparation?.let { preparation ->
+            binder.prepareSession(
+                preparation.bookId,
+                preparation.source,
+                preparation.position,
+                preparation.title,
+                preparation.author,
+                preparation.mode
+            )
+        }
+        if (actions.startPlayback) {
+            ContextCompat.startForegroundService(
+                appContext,
+                ReaderPlaybackService.actionIntent(appContext, ReaderPlaybackService.ACTION_PLAY)
+            )
         }
     }
 
@@ -290,6 +163,10 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     @Suppress("UNUSED_PARAMETER")
     fun load(bookId: String, mode: ReadingMode = ReadingMode.READ) {
         currentBookId = bookId
+        currentMode = mode
+        currentMetadata = ReaderBookMetadata("Kitap", null)
+        playbackPreparation = null
+        ensurePlaybackBound()
         val version = ++loadVersion
         paginationEpoch.next(version)
         paginator = null
@@ -299,16 +176,27 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         automaticTransitionPending = false
         readingSession = null
         migrationPending = false
-        tts?.stop()
-        speechGeneration++
-        spokenPage = null
         currentPageText = ""
         _state.value = ReaderUiState(isLoading = true, contentVersion = version)
 
         // Metadata is independent of pagination and must not delay the first readable page.
         viewModelScope.launch {
-            val header = loadBookHeader(bookId)
-            if (version == loadVersion) _state.value = _state.value.copy(bookHeader = header)
+            val metadata = loadBookMetadata(bookId)
+            if (version == loadVersion) {
+                currentMetadata = metadata
+                _state.value = _state.value.copy(bookHeader = metadata.header)
+                playbackPreparation = playbackPreparation?.copy(
+                    title = metadata.title,
+                    author = metadata.author,
+                    mode = currentMode
+                )?.also(playbackBindingState::updatePreparation)
+                playbackBinder?.updateMetadata(
+                    bookId,
+                    metadata.title,
+                    metadata.author,
+                    currentMode
+                )
+            }
         }
 
         viewModelScope.launch {
@@ -319,14 +207,24 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                 val legacyPage = if (canonical) null else legacyProgressStore.loadPage(bookId).first()
                 val source = withContext(Dispatchers.Default) { ReadingSource(parsed.paragraphs) }
                 if (version != loadVersion) return@launch
-                readingSession = ReadingSession(
+                val session = ReadingSession(
                     source, stored?.position ?: ReadingPosition(),
                     legacyPage, canonical
                 )
+                readingSession = session
                 _state.value = ReaderUiState(
                     isLoading = false, paragraphs = parsed.paragraphs, contentVersion = version,
                     isPreparingPages = true, bookHeader = _state.value.bookHeader
                 )
+                playbackPreparation = PlaybackPreparation(
+                    bookId = bookId,
+                    source = source,
+                    position = session.position,
+                    title = currentMetadata.title,
+                    author = currentMetadata.author,
+                    mode = currentMode
+                ).also(playbackBindingState::updatePreparation)
+                applyPlaybackConnection()
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -346,11 +244,11 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
      * MEVCUT SAYFA METNİ
      * ==========================================
      */
-    private suspend fun loadBookHeader(bookId: String): String = withContext(Dispatchers.IO) {
+    private suspend fun loadBookMetadata(bookId: String): ReaderBookMetadata = withContext(Dispatchers.IO) {
         try {
             val app = getApplication<Application>()
             val book = LibraryStore(app.applicationContext).booksFlow.first().firstOrNull { it.id == bookId }
-                ?: return@withContext "Kitap"
+                ?: return@withContext ReaderBookMetadata("Kitap", null)
             fun clean(value: String?): String? = value?.replace(Regex("\\s+"), " ")?.trim()?.takeIf { it.isNotEmpty() }
             val title = clean(book.title) ?: run {
                 try {
@@ -363,11 +261,11 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                 } catch (_: Exception) { null }
             } ?: "Kitap"
             val author = clean(book.author)
-            if (author == null) title else "$title · $author"
+            ReaderBookMetadata(title, author)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            "Kitap"
+            ReaderBookMetadata("Kitap", null)
         }
     }
 
@@ -377,18 +275,6 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
         currentPageText = text
 
-        /*
-         * Sayfa değiştiğinde Play açıksa
-         * yeni sayfayı okut.
-         *
-         * Burada mevcut sayfanın değiştiğini
-         * kontrol etmek için yeni konuşma
-         * nesli oluşturuyoruz.
-         */
-        if (_state.value.isPlaying) {
-
-            speakCurrentPage()
-        }
     }
 
     /*
@@ -442,6 +328,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         val req = pageRequest
         if (req != null && req.exactPosition != null &&
             req.exactPosition != session.position) {
+            TtsDiagnostics.log("TTS pagination request stale | requestedPosition: ${req.exactPosition}, currentPosition: ${session.position}, block: ${req.block}")
             pageRequest = null
         }
 
@@ -452,6 +339,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                 val page = engine.block(location.first)?.pages?.getOrNull(location.second)
                 if (page != null) {
                     session.resolveLegacy(page.start)
+                    playbackBinder?.adoptLegacyPosition(session.position)
                     activeBlock = location.first
                     engine.focus = activeBlock
                     engine.demand = null
@@ -478,8 +366,9 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                         engine.demand = null
                         pageRequest = null
                         readyTicket = engine.ticket
-                        persistProgress(session, session.position)
+                        TtsDiagnostics.log("TTS pagination request accepted | exactPosition: ${request.exactPosition}, block: ${request.block}, pageIndex: $index, pageStart: ${page.start}, pageEnd: ${page.end}")
                     } else {
+                        TtsDiagnostics.log("TTS pagination request rejected | exactPosition: ${request.exactPosition}, currentPosition: ${session.position}, block: ${request.block}, pageStart: ${page?.start}, pageEnd: ${page?.end}")
                         pageRequest = null
                         engine.demand = null
                         _state.value = _state.value.copy(isPreparingPages = false)
@@ -494,7 +383,13 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                     engine.demand = null
                     pageRequest = null
                     readyTicket = engine.ticket
-                    if (changed) persistProgress(session, session.position)
+                    if (changed) {
+                        playbackBinder?.seek(
+                            session.position,
+                            restartIfPlaying = true,
+                            reason = "explicitNavigation"
+                        )
+                    }
                 } else if (block?.complete == true && block.pages.isEmpty()) {
                     val next = request.block + if (request.index < 0) -1 else 1
                     if (next in 0 until engine.blockCount) {
@@ -503,7 +398,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                     } else {
                         pageRequest = null
                         engine.demand = null
-                        if (request.index >= 0) stop()
+                        if (request.index >= 0) stop("navigationNoTarget")
                     }
                 }
             }
@@ -585,7 +480,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
             direction > 0 && !active.complete -> PageRequest(activeBlock, targetIndex)
             direction > 0 && activeBlock + 1 < engine.blockCount -> PageRequest(activeBlock + 1, 0)
             direction < 0 && activeBlock > 0 -> PageRequest(activeBlock - 1, -1)
-            else -> { if (direction > 0) stop(); return }
+            else -> { if (direction > 0) stop("navigationEnd"); return }
         }
         pageRequest = request
         engine.demand = request.block
@@ -632,19 +527,12 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
          * Manuel geri dönüşte mevcut TTS'yi kes.
          */
         if (s.isPlaying) {
-
-            speechGeneration++
-
-            tts?.stop()
-
+            playbackBinder?.interruptForSeek("prevPageAwaitingCommit")
         }
 
         navigateWindow(-1)
 
-        /*
-         * Play açıksa yeni sayfa
-         * ReaderScreen üzerinden okutulacak.
-         */
+        // Playback restarts from the committed canonical position in publishWindow().
     }
 
     /*
@@ -655,11 +543,8 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     fun togglePlayPause() {
 
         if (_state.value.isPlaying) {
-
-            stop()
-
+            stop("userPause")
         } else {
-
             start()
         }
     }
@@ -670,39 +555,9 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
      * ==========================================
      */
     private fun start() {
-
-        if (!ttsReady) {
-            return
-        }
-
-        if (
-            currentPageText
-                .trim()
-                .isEmpty()
-        ) {
-            return
-        }
-
-        /*
-         * Yeni konuşma nesli.
-         */
-        speechGeneration++
-
-        val generation =
-            speechGeneration
-
-        /*
-         * Play durumunu aç.
-         */
-        _state.value =
-            _state.value.copy(
-                isPlaying = true
-            )
-
-        /*
-         * Mevcut sayfayı okut.
-         */
-        speakCurrentPage(generation)
+        playbackBindingState.requestPlay()
+        ensurePlaybackBound()
+        applyPlaybackConnection()
     }
 
     /*
@@ -710,26 +565,8 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
      * DURDUR
      * ==========================================
      */
-    fun stop() {
-
-        /*
-         * Eski callback'leri geçersiz kıl.
-         */
-        speechGeneration++
-
-        spokenPage = null
-
-        _state.value =
-            _state.value.copy(
-                isPlaying = false
-            )
-
-        /*
-         * Konuşmayı kes.
-         */
-        tts?.stop()
-
-        // Stopping playback does not change the canonical reading position.
+    fun stop(reason: String = "external") {
+        playbackBinder?.pause(reason)
     }
 
     /*
@@ -738,25 +575,10 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
      * ==========================================
      */
     fun slowDown() {
-
-        val s = _state.value
-
-        val newSpeed =
-            (
-                    s.speed - 1
-                    ).coerceAtLeast(1)
-
-        if (newSpeed == s.speed) {
-            return
-        }
-
-        _state.value =
-            s.copy(
-                speed = newSpeed
-            )
-
-        applyTtsRate()
-        restartSpeechIfPlaying()
+        playbackBinder?.setSpeed(
+            _state.value.speed - 1,
+            "speedDecreased"
+        )
     }
 
     /*
@@ -765,25 +587,10 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
      * ==========================================
      */
     fun speedUp() {
-
-        val s = _state.value
-
-        val newSpeed =
-            (
-                    s.speed + 1
-                    ).coerceAtMost(10)
-
-        if (newSpeed == s.speed) {
-            return
-        }
-
-        _state.value =
-            s.copy(
-                speed = newSpeed
-            )
-
-        applyTtsRate()
-        restartSpeechIfPlaying()
+        playbackBinder?.setSpeed(
+            _state.value.speed + 1,
+            "speedIncreased"
+        )
     }
 
     /*
@@ -800,112 +607,8 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
      * Sayfa ne zaman bittiyse TTS callback'i
      * o zaman sonraki sayfaya geçirecek.
      */
-    private fun applyTtsRate() {
-
-        if (!ttsReady) {
-            return
-        }
-
-        val sp =
-            _state.value.speed
-                .coerceIn(1, 10)
-
-        val rate =
-            0.75f +
-                    (
-                            sp - 1
-                            ) *
-                    (
-                            1.0f / 9.0f
-                            )
-
-        tts?.setSpeechRate(rate)
-    }
-
-    /*
-     * ==========================================
-     * SAYFAYI SESLİ OKU
-     * ==========================================
-     */
-    private fun speakCurrentPage(
-        requestedGeneration: Long? = null
-    ) {
-
-        val generation = requestedGeneration ?: ++speechGeneration
-
-        if (!ttsReady) {
-            return
-        }
-
-        if (!_state.value.isPlaying) {
-            return
-        }
-
-        /*
-         * Eski bir çağrıysa iptal et.
-         */
-        if (
-            generation != speechGeneration
-        ) {
-            return
-        }
-
-        val text = currentPageText
-
-        if (text.isEmpty()) {
-            return
-        }
-
-        /*
-         * Hangi sayfanın konuşulduğunu
-         * kaydediyoruz.
-         */
-        val session = readingSession ?: return
-        val page = session.pages.getOrNull(session.pageIndex) ?: return
-        val pageStartOffset = session.source.offsetOf(page.start)
-        val spokenStart = (session.source.offsetOf(session.position) - pageStartOffset)
-            .coerceIn(0, text.length)
-        spokenPage = SpokenPage(generation, _state.value.pageIndex, pageStartOffset, spokenStart)
-
-        /*
-         * Mevcut konuşmayı kes.
-         *
-         * Böylece manuel sayfa değişiminde
-         * eski sayfa arkadan devam etmez.
-         */
-        tts?.stop()
-
-        /*
-         * Güncel hızı uygula.
-         */
-        applyTtsRate()
-
-        /*
-         * Yeni sayfayı okut.
-         */
-        val params = Bundle().apply {
-            putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, utteranceVolume(_state.value.isSoundEnabled))
-        }
-        tts?.speak(
-            text.substring(spokenStart),
-            TextToSpeech.QUEUE_FLUSH,
-            params,
-            "reader_$generation"
-        )
-    }
-
     fun toggleSound() {
-        val state = _state.value
-        _state.value = state.copy(isSoundEnabled = !state.isSoundEnabled)
-        restartSpeechIfPlaying()
-    }
-
-    private fun restartSpeechIfPlaying() {
-        if (!_state.value.isPlaying) return
-        val generation = ++speechGeneration
-        spokenPage = null
-        tts?.stop()
-        speakCurrentPage(generation)
+        playbackBinder?.toggleSound("soundToggled")
     }
 
     private fun requestAutomaticNextPage() {
@@ -915,7 +618,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
             val engine = paginator ?: return
             val preparationBlock = if (engine.block(activeBlock)?.complete == false) activeBlock else activeBlock + 1
             if (preparationBlock !in 0 until engine.blockCount) {
-                stop()
+                stop("automaticTransitionNoBlock")
                 return
             }
             automaticTransitionPending = true
@@ -949,13 +652,22 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         if (direction > 0) nextPage() else if (direction < 0) prevPage()
     }
 
-    private fun updateActivePosition(position: ReadingPosition) {
+    private fun applyPlaybackSnapshot(snapshot: PlaybackSnapshot) {
+        if (snapshot.bookId != null && snapshot.bookId != currentBookId) return
+        _state.value = _state.value.copy(
+            isPlaying = snapshot.isPlaying,
+            isSoundEnabled = snapshot.isSoundEnabled,
+            speed = snapshot.speed
+        )
+        val position = snapshot.position ?: return
+        projectPlaybackPosition(position, snapshot.generation)
+    }
+
+    /** Projects controller-owned canonical position into pagination and highlight state. */
+    private fun projectPlaybackPosition(position: ReadingPosition, generation: Long) {
         val session = readingSession ?: return
-        val engine = paginator ?: return
-
         val changed = session.updatePosition(position)
-        if (changed) persistProgress(session, session.position)
-
+        val engine = paginator
         val page = session.pages.getOrNull(session.pageIndex)
         val isInsidePage = page != null &&
             comparePositions(session.position, page.start) >= 0 &&
@@ -970,7 +682,9 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                 canonicalPosition = session.position
             )
 
-            if (!changed || (pageRequest != null && pageRequest?.exactPosition == null) || engine.blockCount <= 0) {
+            if (engine == null || !changed ||
+                (pageRequest != null && pageRequest?.exactPosition == null) || engine.blockCount <= 0
+            ) {
                 return
             }
 
@@ -978,6 +692,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
             val blockIdx = engine.blockAt(session.position).coerceIn(0, engine.blockCount - 1)
             pageRequest = PageRequest(blockIdx, -1, exactPosition = session.position)
+            TtsDiagnostics.log("TTS pagination request created | exactPosition: ${session.position}, block: $blockIdx, currentGen: $generation")
             engine.demand = blockIdx
             _state.value = _state.value.copy(isPreparingPages = true)
             paginationWake.trySend(Unit)
@@ -1000,7 +715,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         // A real vertical gesture owns playback independently from a possibly
         // delayed UI isPlaying snapshot. Invalidating the generation also
         // rejects an onRangeStart/onDone already queued by Android TTS.
-        stop()
+        stop("manualVerticalDrag")
     }
 
     /*
@@ -1031,23 +746,28 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    fun exitReader() {
+        playbackBinder?.stop("readerExit") ?: appContext.stopService(
+            Intent(appContext, ReaderPlaybackService::class.java)
+        )
+    }
+
     /*
      * ==========================================
      * VIEWMODEL KAPANIŞI
      * ==========================================
      */
     override fun onCleared() {
-
+        cleared = true
+        playbackStateJob?.cancel()
+        playbackStateJob = null
+        playbackBinder = null
+        if (playbackBound) {
+            appContext.unbindService(playbackConnection)
+            playbackBound = false
+        }
+        TtsDiagnostics.log("ReaderViewModel onCleared | playback ownership remains with service")
         super.onCleared()
-
-        speechGeneration++
-
-        tts?.stop()
-
-        tts?.shutdown()
-
-        tts = null
-
-        ttsReady = false
     }
 }

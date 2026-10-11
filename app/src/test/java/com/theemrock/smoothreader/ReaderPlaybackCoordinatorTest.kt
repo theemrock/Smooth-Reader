@@ -151,4 +151,14 @@ class ReaderPlaybackCoordinatorTest {
         assertTrue(fixture.controller.hasSession("book"))
         assertEquals(1, fixture.focus.abandonCount)
     }
+
+    @Test fun controllerCompletionReleasesHeldAudioFocus() {
+        val fixture = fixture()
+        fixture.coordinator.play()
+
+        fixture.coordinator.onPlaybackStateChanged(isPlaying = false)
+        fixture.coordinator.onPlaybackStateChanged(isPlaying = false)
+
+        assertEquals(1, fixture.focus.abandonCount)
+    }
 }

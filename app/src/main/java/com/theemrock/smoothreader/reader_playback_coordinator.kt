@@ -39,6 +39,10 @@ internal class ReaderPlaybackCoordinator(
         pause(reason)
     }
 
+    fun onPlaybackStateChanged(isPlaying: Boolean) {
+        if (!isPlaying) abandonFocus()
+    }
+
     fun stop(reason: String) {
         if (stopped) return
         stopped = true

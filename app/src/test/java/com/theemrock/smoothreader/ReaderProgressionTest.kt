@@ -32,6 +32,65 @@ class ReaderProgressionTest {
         )
     }
 
+    @Test fun doubleTapInMiddleOfWordMapsToCanonicalWordStart() {
+        val tappedSource = ReadingSource(listOf("Merhaba dünya"))
+        val page = tappedSource.page(0, tappedSource.length, tappedSource.text)
+
+        assertEquals(
+            ReadingPosition(0, 0),
+            canonicalWordStartForPageOffset(tappedSource, page, localOffset = 4)
+        )
+    }
+
+    @Test fun doubleTapAtParagraphEdgesMapsToWordStarts() {
+        val tappedSource = ReadingSource(listOf("İlk", "Son kelime."))
+        val page = tappedSource.page(0, tappedSource.length, tappedSource.text)
+
+        assertEquals(
+            ReadingPosition(0, 0),
+            canonicalWordStartForPageOffset(tappedSource, page, localOffset = 0)
+        )
+        assertEquals(
+            ReadingPosition(1, 4),
+            canonicalWordStartForPageOffset(
+                tappedSource,
+                page,
+                localOffset = tappedSource.text.lastIndex
+            )
+        )
+    }
+
+    @Test fun punctuationAndWhitespaceResolveWithoutStartingOnSeparators() {
+        val tappedSource = ReadingSource(listOf("Merhaba, dünya"))
+        val page = tappedSource.page(0, tappedSource.length, tappedSource.text)
+
+        assertEquals(
+            ReadingPosition(0, 0),
+            canonicalWordStartForPageOffset(tappedSource, page, localOffset = 7)
+        )
+        assertEquals(
+            ReadingPosition(0, 9),
+            canonicalWordStartForPageOffset(tappedSource, page, localOffset = 8)
+        )
+    }
+
+    @Test fun pageBeginningInsideWordStillMapsToSourceWordStart() {
+        val tappedSource = ReadingSource(listOf("Merhaba dünya"))
+        val page = tappedSource.page(3, tappedSource.length, tappedSource.text.substring(3))
+
+        assertEquals(
+            ReadingPosition(0, 0),
+            canonicalWordStartForPageOffset(tappedSource, page, localOffset = 0)
+        )
+    }
+
+    @Test fun pageOffsetWithoutAnyWordHasNoTtsStart() {
+        val tappedSource = ReadingSource(listOf("...   "))
+        val page = tappedSource.page(0, tappedSource.length, tappedSource.text)
+
+        assertNull(canonicalWordStartForPageOffset(tappedSource, page, localOffset = 2))
+    }
+
     @Test fun verticalSurfaceMovesCurrentAndAdjacentInOneCoordinateSystem() {
         assertEquals(VerticalPageGeometry(-240f, 760f, -1240f), verticalPageGeometry(-240f, 1000f))
         assertEquals(VerticalPageGeometry(240f, 1240f, -760f), verticalPageGeometry(240f, 1000f))

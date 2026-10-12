@@ -14,6 +14,48 @@ internal data class SentenceRange(
 
 private val turkishLocale = Locale("tr", "TR")
 
+private fun isWordCoreCharacter(character: Char): Boolean =
+    character.isLetterOrDigit() || when (Character.getType(character)) {
+        Character.NON_SPACING_MARK.toInt(),
+        Character.COMBINING_SPACING_MARK.toInt(),
+        Character.ENCLOSING_MARK.toInt() -> true
+        else -> false
+    }
+
+private fun isWordCharacter(text: String, index: Int): Boolean {
+    if (index !in text.indices) return false
+    val character = text[index]
+    if (isWordCoreCharacter(character)) return true
+    if (character != '\'' && character != '’') return false
+    return index > 0 && index < text.lastIndex &&
+        isWordCoreCharacter(text[index - 1]) && isWordCoreCharacter(text[index + 1])
+}
+
+internal fun canonicalWordStartForPageOffset(
+    source: ReadingSource,
+    page: ReadingPage,
+    localOffset: Int
+): ReadingPosition? {
+    if (page.text.isEmpty() || localOffset !in 0..page.text.length) return null
+    val pageStart = source.offsetOf(page.start)
+    val pageEnd = minOf(source.length, pageStart + page.text.length)
+    val tappedOffset = (pageStart + localOffset).coerceIn(pageStart, pageEnd)
+    val text = source.text
+
+    val anchor = when {
+        tappedOffset < pageEnd && isWordCharacter(text, tappedOffset) -> tappedOffset
+        tappedOffset > 0 && isWordCharacter(text, tappedOffset - 1) -> tappedOffset - 1
+        else -> {
+            val next = (tappedOffset until pageEnd).firstOrNull { isWordCharacter(text, it) }
+            next ?: (tappedOffset - 1 downTo pageStart).firstOrNull { isWordCharacter(text, it) }
+        }
+    } ?: return null
+
+    var wordStart = anchor
+    while (wordStart > 0 && isWordCharacter(text, wordStart - 1)) wordStart--
+    return source.positionAt(wordStart)
+}
+
 private fun paragraphSentences(source: ReadingSource, paragraphIndex: Int): List<SentenceRange> {
     val paragraph = source.paragraphs.getOrNull(paragraphIndex) ?: return emptyList()
     if (paragraph.isBlank()) return emptyList()

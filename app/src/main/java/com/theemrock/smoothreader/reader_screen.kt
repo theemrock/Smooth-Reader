@@ -128,7 +128,7 @@ internal fun themeColorsFor(
             ReaderThemeColors(
                 background = Color(0xFFF5ECD9),
                 text = Color(0xFF4A3728),
-                highlight = Color(0xFFE87A1E),
+                highlight = Color(0x4019C3E6),
                 activeText = Color(0xFF2E86DE)
             )
         }

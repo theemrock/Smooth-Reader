@@ -246,7 +246,7 @@ class ReaderProgressionTest {
         assertEquals(Color(0xFFE0E0E0), night.activeText)
 
         val sepia = themeColorsFor(ReaderTheme.SEPYA)
-        assertEquals(Color(0xFFE87A1E), sepia.highlight)
+        assertEquals(Color(0x4019C3E6), sepia.highlight)
         assertEquals(Color(0xFF2E86DE), sepia.activeText)
     }
 

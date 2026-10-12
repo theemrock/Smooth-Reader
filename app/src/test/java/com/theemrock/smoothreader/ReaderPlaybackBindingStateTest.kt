@@ -91,4 +91,23 @@ class ReaderPlaybackBindingStateTest {
         assertEquals("book", freshConnection.preparation?.bookId)
         assertTrue(freshConnection.startPlayback)
     }
+
+    @Test fun selectedWordStartCancelsPendingPlayAndIsDeliveredOnce() {
+        val state = ReaderPlaybackBindingState()
+        state.updatePreparation(preparation())
+        state.requestPlay()
+        val selected = ReadingPosition(0, 5)
+
+        state.selectStart(selected)
+        val first = state.connected(
+            PlaybackSnapshot(bookId = "book", position = ReadingPosition(), isPlaying = true)
+        )
+        val repeated = state.connected(
+            PlaybackSnapshot(bookId = "book", position = selected, isPlaying = false)
+        )
+
+        assertFalse(first.startPlayback)
+        assertEquals(selected, first.selectedStart)
+        assertNull(repeated.selectedStart)
+    }
 }

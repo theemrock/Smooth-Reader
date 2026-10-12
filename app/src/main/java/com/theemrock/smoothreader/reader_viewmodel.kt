@@ -169,6 +169,10 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         actions.snapshotToApply?.let(::applyPlaybackSnapshot)
+        actions.selectedStart?.let { position ->
+            if (binder.state.value.isPlaying) binder.pause("wordSelection")
+            binder.seek(position, restartIfPlaying = false, reason = "wordSelection")
+        }
         if (actions.startPlayback) {
             ContextCompat.startForegroundService(
                 appContext,
@@ -309,6 +313,18 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
         currentPageText = text
 
+    }
+
+    fun selectTtsStartAtPageOffset(localOffset: Int): Boolean {
+        val session = readingSession ?: return false
+        val page = session.pages.getOrNull(session.pageIndex) ?: return false
+        val position = canonicalWordStartForPageOffset(session.source, page, localOffset) ?: return false
+        playbackPreparation = playbackPreparation?.copy(position = position)
+            ?.also(playbackBindingState::updatePreparation)
+        playbackBindingState.selectStart(position)
+        ensurePlaybackBound()
+        applyPlaybackConnection()
+        return true
     }
 
     /*

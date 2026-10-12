@@ -124,6 +124,29 @@ class ReaderPlaybackControllerTest {
         assertTrue(engine.speaks.last().utteranceId != oldId)
     }
 
+    @Test fun selectedWordPausesRejectsStaleCallbackAndNextPlayStartsExactlyThere() {
+        val engine = FakeSpeechEngine()
+        val controller = controller(engine)
+        controller.prepare("book", ReadingSource(listOf("Bir uzun cümle.")), ReadingPosition())
+        engine.ready()
+        controller.play()
+        val staleId = engine.speaks.single().utteranceId
+
+        controller.pause("wordSelection")
+        controller.seek(ReadingPosition(0, 4), restartIfPlaying = false, reason = "wordSelection")
+        engine.range(staleId, 2, 3)
+        engine.done(staleId)
+
+        assertFalse(controller.state.value.isPlaying)
+        assertEquals(ReadingPosition(0, 4), controller.state.value.position)
+        assertEquals(1, engine.speaks.size)
+
+        controller.play()
+
+        assertEquals("uzun cümle.", engine.speaks.last().text)
+        assertTrue(controller.state.value.isPlaying)
+    }
+
     @Test fun speedAndSoundChangesRestartOnlyActivePlaybackFromCanonicalPosition() {
         val engine = FakeSpeechEngine()
         val controller = controller(engine)

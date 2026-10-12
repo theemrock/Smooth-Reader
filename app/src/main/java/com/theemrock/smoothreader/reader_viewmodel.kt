@@ -56,6 +56,16 @@ data class ReaderUiState(
     val canonicalPosition: ReadingPosition? = null,
 )
 
+internal fun ReaderUiState.beginPaginationLayout(layoutVersion: Long): ReaderUiState = copy(
+    isPreparingPages = true,
+    totalPages = 0,
+    globalPageNumber = null,
+    layoutVersion = layoutVersion,
+    verticalTransitionId = 0,
+    verticalTransitionContentVersion = 0,
+    verticalTransitionLayoutVersion = 0
+)
+
 class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     private data class ReaderBookMetadata(val title: String, val author: String?) {
@@ -317,11 +327,9 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         readyTicket = null
         pageRequest = null
         queuedDirection = null
+        automaticTransitionPending = false
         engine.demand = engine.focus
-        _state.value = _state.value.copy(
-            isPreparingPages = true, totalPages = 0, globalPageNumber = null,
-            layoutVersion = ticket.layout
-        )
+        _state.value = _state.value.beginPaginationLayout(ticket.layout)
         try {
             while (paginationEpoch.accepts(ticket)) {
                 currentCoroutineContext().ensureActive()
@@ -381,8 +389,11 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                     val index = pageForPosition(block.pages, request.exactPosition)
                     val page = block.pages.getOrNull(index)
                     if (page != null &&
-                        comparePositions(request.exactPosition, page.start) >= 0 &&
-                        comparePositions(request.exactPosition, page.end) < 0 &&
+                        pageContainsPosition(
+                            page,
+                            request.exactPosition,
+                            session.source.positionAt(session.source.length)
+                        ) &&
                         request.exactPosition == session.position &&
                         session.acceptExactWindow(block.pages.toList(), index, request.exactPosition)) {
                         activeBlock = request.block
@@ -446,7 +457,9 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         }
         val anchor = session.source.clamp(session.position)
         // Do not display an earlier partial page while the canonical anchor is still unmeasured.
-        if (readyTicket != engine.ticket && !active.complete && comparePositions(pages.last().end, anchor) < 0) return
+        if (readyTicket != engine.ticket && !canonicalMeasurementReady(
+                pages.last().end, anchor, active.complete
+            )) return
         session.acceptWindow(pages.toList())
         readyTicket = engine.ticket
         if (pageRequest == null) engine.demand = null
@@ -455,9 +468,10 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
             ?: engine.block(activeBlock - 1)?.takeIf { it.complete }?.pages?.lastOrNull()?.text
         val nextPageText = session.pages.getOrNull(session.pageIndex + 1)?.text
             ?: engine.block(activeBlock + 1)?.pages?.firstOrNull()?.text
-        val activeSentence = sentenceRanges(session.source, page).firstOrNull {
-            comparePositions(it.start, session.position) <= 0 && comparePositions(session.position, it.end) < 0
-        } ?: sentenceRanges(session.source, page).firstOrNull()
+        val activeSentence = activeSentenceForPosition(
+            sentenceRanges(session.source, page),
+            session.position
+        )
         _state.value = _state.value.copy(
             pageIndex = session.pageIndex,
             pageText = page.text,
@@ -658,16 +672,23 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    fun completeAutomaticVerticalTransition(id: Long, contentVersion: Long, layoutVersion: Long) {
+    fun completeAutomaticVerticalTransition(id: Long, contentVersion: Long, layoutVersion: Long): Boolean {
         val state = _state.value
-        if (state.verticalTransitionId != id || state.contentVersion != contentVersion ||
-            state.layoutVersion != layoutVersion ||
-            state.verticalTransitionContentVersion != contentVersion ||
-            state.verticalTransitionLayoutVersion != layoutVersion || !state.isPlaying) return
+        val accepted = acceptsAutomaticVerticalTransition(
+            requested = VerticalViewportToken(contentVersion, layoutVersion, id),
+            current = VerticalViewportToken(
+                state.verticalTransitionContentVersion,
+                state.verticalTransitionLayoutVersion,
+                state.verticalTransitionId
+            ),
+            isPlaying = state.isPlaying
+        ) && state.contentVersion == contentVersion && state.layoutVersion == layoutVersion
+        if (!accepted) return false
         nextPage()
         if (_state.value.verticalTransitionId == id) {
             _state.value = _state.value.copy(verticalTransitionId = 0)
         }
+        return true
     }
 
     fun completeManualVerticalTransition(direction: Int, contentVersion: Long, layoutVersion: Long) {

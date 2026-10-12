@@ -54,6 +54,13 @@ internal fun sentenceRanges(source: ReadingSource, page: ReadingPage): List<Sent
     return result
 }
 
+internal fun activeSentenceForPosition(
+    ranges: List<SentenceRange>,
+    position: ReadingPosition
+): SentenceRange? = ranges.firstOrNull {
+    comparePositions(it.start, position) <= 0 && comparePositions(position, it.end) < 0
+}
+
 internal data class VerticalPageGeometry(
     val currentY: Float,
     val nextY: Float,
@@ -131,6 +138,9 @@ internal data class ListenTrackingMotion(
         offset = rebaseCommittedOffset(offset, pageHeight, direction),
         target = rebaseCommittedOffset(target, pageHeight, direction)
     )
+
+    fun afterAutomaticTransitionCompletion(accepted: Boolean, pageHeight: Float) =
+        if (accepted) rebase(pageHeight, 1) else this
 }
 
 internal fun advanceListenTracking(
@@ -154,11 +164,31 @@ internal data class VerticalViewportToken(
         contentVersion == content && layoutVersion == layout && generation == currentGeneration
 }
 
+internal fun acceptsAutomaticVerticalTransition(
+    requested: VerticalViewportToken,
+    current: VerticalViewportToken,
+    isPlaying: Boolean
+): Boolean = isPlaying && requested.generation != 0L && requested == current
+
+internal fun shouldAttemptAutomaticVerticalTransition(
+    transitionId: Long,
+    rejectedTransitionId: Long
+): Boolean = transitionId != 0L && transitionId != rejectedTransitionId
+
 internal fun activeSentenceViewportTarget(
     sentenceCenter: Float,
     viewportHeight: Float,
     pageHeight: Float
 ): Float = (viewportHeight * 0.5f - sentenceCenter).coerceIn(-pageHeight, 0f)
+
+internal fun activeSentenceTrackingTarget(
+    sentenceCenter: Float?,
+    currentTarget: Float,
+    viewportHeight: Float,
+    pageHeight: Float
+): Float = sentenceCenter?.let {
+    activeSentenceViewportTarget(it, viewportHeight, pageHeight)
+} ?: currentTarget
 
 internal data class PlaybackControlState(
     val isPlaying: Boolean,

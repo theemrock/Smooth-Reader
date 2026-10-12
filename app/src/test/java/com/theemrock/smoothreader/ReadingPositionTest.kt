@@ -30,6 +30,25 @@ class ReadingPositionTest {
         assertEquals(4, pageForPosition(pages, ReadingPosition(2, 14)))
     }
 
+    @Test fun partialPageEndDoesNotContainBoundaryUntilNextPageIsMeasured() {
+        val position = ReadingPosition(0, 5)
+        val partial = ReadingPage("First", ReadingPosition(0, 0), position)
+
+        assertFalse(pageContainsPosition(partial, position, ReadingPosition(0, 15)))
+        assertFalse(canonicalMeasurementReady(partial.end, position, blockComplete = false))
+    }
+
+    @Test fun finalPageContainsTheRealBookEnd() {
+        val bookEnd = ReadingPosition(0, 15)
+        val finalPage = ReadingPage("paragraph", ReadingPosition(0, 6), bookEnd)
+
+        assertTrue(pageContainsPosition(finalPage, bookEnd, bookEnd))
+        assertTrue(canonicalMeasurementReady(finalPage.end, bookEnd, blockComplete = true))
+        val session = ReadingSession(ReadingSource(listOf("First paragraph")), bookEnd, null, true)
+        assertTrue(session.acceptExactWindow(listOf(finalPage), 0, bookEnd))
+        assertEquals(bookEnd, session.position)
+    }
+
     @Test fun clampsForDisplayWithoutRewritingCanonicalPosition() {
         assertEquals(ReadingPosition(), source.clamp(ReadingPosition(-9, -7)))
         assertEquals(ReadingPosition(2, 14), source.clamp(ReadingPosition(99, 999)))

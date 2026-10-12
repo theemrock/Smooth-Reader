@@ -82,6 +82,20 @@ internal fun comparePositions(a: ReadingPosition, b: ReadingPosition): Int =
 internal fun pageForPosition(pages: List<ReadingPage>, position: ReadingPosition): Int =
     pages.indexOfLast { comparePositions(it.start, position) <= 0 }.coerceAtLeast(0)
 
+internal fun pageContainsPosition(
+    page: ReadingPage,
+    position: ReadingPosition,
+    bookEnd: ReadingPosition
+): Boolean = comparePositions(position, page.start) >= 0 &&
+    (comparePositions(position, page.end) < 0 ||
+        (position == bookEnd && page.end == bookEnd))
+
+internal fun canonicalMeasurementReady(
+    measuredEnd: ReadingPosition,
+    position: ReadingPosition,
+    blockComplete: Boolean
+): Boolean = blockComplete || comparePositions(measuredEnd, position) > 0
+
 /** No instance is created until both the book and stored progress have loaded. */
 internal class ReadingSession(
     val source: ReadingSource,
@@ -188,7 +202,7 @@ internal class ReadingSession(
         if (index !in newPages.indices || newPages.isEmpty()) return false
         val page = newPages[index]
         val safe = source.clamp(exactPosition)
-        if (comparePositions(safe, page.start) < 0 || comparePositions(safe, page.end) >= 0) return false
+        if (!pageContainsPosition(page, safe, source.positionAt(source.length))) return false
         if (!acceptWindow(newPages)) return false
         cancelLegacy()
         pageIndex = index

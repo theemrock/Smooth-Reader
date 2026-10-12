@@ -84,6 +84,19 @@ class WindowPaginationTest {
         }
     }
 
+    @Test fun completedMeasurementResolvesCanonicalPositionInSkippedWhitespace() = runBlocking {
+        val s = ReadingSource(listOf("Hello.", "World."))
+        val canonical = ReadingPosition(0, 6)
+        val p = engine(s, canonical)
+        completeBlock(p, p.focus, pageChars = 6)
+        val block = p.block(p.focus)!!
+        val selected = block.pages[pageForPosition(block.pages, canonical)]
+
+        assertTrue(block.complete)
+        assertFalse(pageContainsPosition(selected, canonical, s.positionAt(s.length)))
+        assertTrue(canonicalMeasurementReady(block.pages.last().end, canonical, block.complete))
+    }
+
     @Test fun staleLayoutAndOtherBookTicketsAreRejected() {
         val epoch = PaginationEpoch()
         val firstLayout = epoch.next(1)

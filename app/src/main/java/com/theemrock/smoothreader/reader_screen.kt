@@ -274,7 +274,7 @@ fun ReaderScreen(
     var settleDirection by remember { mutableStateOf(0) }
     var settleDurationMs by remember { mutableStateOf(0) }
     var readerPageHeightPx by remember { mutableStateOf(1) }
-    var activeSentenceCenterPx by remember { mutableStateOf(0f) }
+    var activeSentenceCenterPx by remember { mutableStateOf<Float?>(null) }
     var listenMotion by remember { mutableStateOf(ListenTrackingMotion(0f, 0f, 0f)) }
 
     /*
@@ -511,22 +511,10 @@ fun ReaderScreen(
 
         val currentText = state.pageText
         LaunchedEffect(currentText) {
-            activeSentenceCenterPx = 0f
+            activeSentenceCenterPx = null
             viewModel.setCurrentPageText(
                 currentText
             )
-        }
-
-        LaunchedEffect(readerPageHeightPx) {
-            if (readerPageHeightPx > 1) {
-                verticalViewport = VerticalViewportState(
-                    if (state.isPlaying)
-                        VerticalViewportOwner.AUTO_TRACKING else VerticalViewportOwner.IDLE,
-                    0f
-                )
-                listenMotion = ListenTrackingMotion(0f, 0f, 0f)
-                viewportGeneration++
-            }
         }
 
         LaunchedEffect(state.layoutVersion) {
@@ -537,6 +525,7 @@ fun ReaderScreen(
                     0f
                 )
                 listenMotion = ListenTrackingMotion(0f, 0f, 0f)
+                activeSentenceCenterPx = null
                 viewportGeneration++
             }
         }
@@ -591,15 +580,19 @@ fun ReaderScreen(
                 }
 
                 VerticalViewportOwner.AUTO_TRACKING -> {
+                    var rejectedTransitionId = 0L
                     var previousFrame = withFrameNanos { it }
                     while (verticalViewport.owner == VerticalViewportOwner.AUTO_TRACKING && latestState.isPlaying) {
                         val frame = withFrameNanos { it }
                         val elapsedMs = ((frame - previousFrame) / 1_000_000L).coerceAtMost(50L)
                         previousFrame = frame
                         val height = readerPageHeightPx.toFloat()
-                        val transitionPending = latestState.verticalTransitionId != 0L
-                        val target = if (transitionPending) -height else activeSentenceViewportTarget(
-                            activeSentenceCenterPx, height, height
+                        val transitionPending = shouldAttemptAutomaticVerticalTransition(
+                            latestState.verticalTransitionId,
+                            rejectedTransitionId
+                        )
+                        val target = if (transitionPending) -height else activeSentenceTrackingTarget(
+                            activeSentenceCenterPx, listenMotion.target, height, height
                         )
                         listenMotion = advanceListenTracking(
                             listenMotion.retarget(target), elapsedMs / 1000f
@@ -610,17 +603,23 @@ fun ReaderScreen(
                         )
                         if (transitionPending && listenMotion.offset <= -height + 1f) {
                             verticalViewport = verticalViewport.copy(owner = VerticalViewportOwner.COMMITTING)
-                            viewModel.completeAutomaticVerticalTransition(
+                            val accepted = viewModel.completeAutomaticVerticalTransition(
                                 latestState.verticalTransitionId,
                                 latestState.verticalTransitionContentVersion,
                                 latestState.verticalTransitionLayoutVersion
                             )
-                            listenMotion = listenMotion.rebase(height, 1)
+                            listenMotion = listenMotion.afterAutomaticTransitionCompletion(
+                                accepted, height
+                            )
                             verticalViewport = VerticalViewportState(
-                                VerticalViewportOwner.AUTO_TRACKING,
+                                if (latestState.isPlaying) VerticalViewportOwner.AUTO_TRACKING
+                                else VerticalViewportOwner.IDLE,
                                 listenMotion.offset,
                                 listenMotion.target
                             )
+                            if (!accepted) {
+                                rejectedTransitionId = latestState.verticalTransitionId
+                            }
                         }
                     }
                 }
@@ -802,7 +801,7 @@ fun ReaderScreen(
                                         val startBox = result.getBoundingBox(state.activeSentenceStart)
                                         val endBox = result.getBoundingBox(state.activeSentenceEnd - 1)
                                         (startBox.top + endBox.bottom) * 0.5f
-                                    } else 0f
+                                    } else null
                                 }
                             )
                         }

@@ -99,10 +99,72 @@ class ReaderProgressionTest {
         assertFalse(token.accepts(3, 7, 12))
     }
 
+    @Test fun resizeInvalidatesPendingTransitionWithoutMovingCanonicalPosition() {
+        val canonical = ReadingPosition(4, 27)
+        val resized = ReaderUiState(
+            contentVersion = 3,
+            layoutVersion = 7,
+            verticalTransitionId = 11,
+            verticalTransitionContentVersion = 3,
+            verticalTransitionLayoutVersion = 7,
+            canonicalPosition = canonical
+        ).beginPaginationLayout(8)
+
+        assertEquals(8L, resized.layoutVersion)
+        assertEquals(0L, resized.verticalTransitionId)
+        assertEquals(canonical, resized.canonicalPosition)
+    }
+
+    @Test fun staleAutomaticCommitIsRejectedWithoutRebasingTrackingMotion() {
+        val requested = VerticalViewportToken(3, 7, 11)
+        val current = VerticalViewportToken(3, 8, 0)
+        val motion = ListenTrackingMotion(-1000f, -80f, -1000f)
+
+        val accepted = acceptsAutomaticVerticalTransition(requested, current, isPlaying = true)
+
+        assertFalse(accepted)
+        assertEquals(motion, motion.afterAutomaticTransitionCompletion(accepted, 1000f))
+        assertFalse(shouldAttemptAutomaticVerticalTransition(11, rejectedTransitionId = 11))
+        assertTrue(shouldAttemptAutomaticVerticalTransition(12, rejectedTransitionId = 11))
+    }
+
+    @Test fun acceptedAutomaticCommitRebasesExactlyOnce() {
+        val token = VerticalViewportToken(3, 8, 12)
+        val motion = ListenTrackingMotion(-1000f, -80f, -1000f)
+
+        val accepted = acceptsAutomaticVerticalTransition(token, token, isPlaying = true)
+        val committed = motion.afterAutomaticTransitionCompletion(accepted, 1000f)
+
+        assertTrue(accepted)
+        assertEquals(0f, committed.offset, 0.001f)
+        assertEquals(0f, committed.target, 0.001f)
+    }
+
     @Test fun activeSentenceProducesBoundedUpwardViewportTarget() {
         assertEquals(0f, activeSentenceViewportTarget(100f, 1000f, 1000f), 0.01f)
         assertEquals(-200f, activeSentenceViewportTarget(700f, 1000f, 1000f), 0.01f)
         assertEquals(-1000f, activeSentenceViewportTarget(1700f, 1000f, 1000f), 0.01f)
+    }
+
+    @Test fun missingSentenceMeasurementKeepsLastValidTrackingTarget() {
+        assertEquals(
+            -240f,
+            activeSentenceTrackingTarget(null, -240f, 1000f, 1000f),
+            0.01f
+        )
+        assertEquals(
+            -200f,
+            activeSentenceTrackingTarget(700f, -240f, 1000f, 1000f),
+            0.01f
+        )
+    }
+
+    @Test fun missingCanonicalSentenceDoesNotFallbackToFirstSentence() {
+        val first = SentenceRange(ReadingPosition(0, 0), ReadingPosition(0, 5))
+        val second = SentenceRange(ReadingPosition(0, 10), ReadingPosition(0, 15))
+
+        assertNull(activeSentenceForPosition(listOf(first, second), ReadingPosition(0, 7)))
+        assertEquals(second, activeSentenceForPosition(listOf(first, second), ReadingPosition(0, 12)))
     }
 
     @Test fun soundOffUsesSilentVolumeWithoutStoppingPlayback() {

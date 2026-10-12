@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -55,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.paint
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -66,6 +68,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -98,6 +101,11 @@ internal data class ReaderThemeColors(
 private data class ReaderPaper(
     val drawableRes: Int,
     val alpha: Float
+)
+
+private data class ReaderTextLayout(
+    val text: String,
+    val result: TextLayoutResult
 )
 
 internal fun themeColorsFor(
@@ -280,6 +288,7 @@ fun ReaderScreen(
     var settleDurationMs by remember { mutableStateOf(0) }
     var readerPageHeightPx by remember { mutableStateOf(1) }
     var activeSentenceCenterPx by remember { mutableStateOf<Float?>(null) }
+    var currentTextLayout by remember { mutableStateOf<ReaderTextLayout?>(null) }
     var listenMotion by remember { mutableStateOf(ListenTrackingMotion(0f, 0f, 0f)) }
 
     /*
@@ -515,8 +524,14 @@ fun ReaderScreen(
         }
 
         val currentText = state.pageText
+        val handleReaderDoubleTap by rememberUpdatedState<(Offset) -> Unit> { position ->
+            val layout = currentTextLayout?.takeIf { it.text == currentText } ?: return@rememberUpdatedState
+            val localOffset = layout.result.getOffsetForPosition(position)
+            viewModel.selectTtsStartAtPageOffset(localOffset)
+        }
         LaunchedEffect(currentText) {
             activeSentenceCenterPx = null
+            currentTextLayout = null
             viewModel.setCurrentPageText(
                 currentText
             )
@@ -693,12 +708,6 @@ fun ReaderScreen(
                             .weight(1f)
                             .clipToBounds()
                             .onSizeChanged { readerPageHeightPx = it.height.coerceAtLeast(1) }
-                            .clickable {
-                                /*
-                                 * Metne dokunmak menüyü
-                                 * açıp kapatmaz.
-                                 */
-                            }
                             .pointerInput(Unit) {
                                 var totalDrag = 0f
                                 var releaseVelocity = 0f
@@ -785,31 +794,37 @@ fun ReaderScreen(
                                 highlight = themeColors.highlight,
                                 activeText = themeColors.activeText
                             )
-                            Text(
-                                text = renderedText,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .graphicsLayer {
-                                        translationY = verticalPageGeometry(
-                                            verticalViewport.offset, readerPageHeightPx.toFloat()
-                                        ).currentY
-                                    },
-                                fontSize = fontSizeSp.sp,
-                                lineHeight = (fontSizeSp + 10).sp,
-                                fontFamily = selectedFontFamily,
-                                color = themeColors.text,
-                                onTextLayout = { result ->
-                                    activeSentenceCenterPx = if (
-                                        state.activeSentenceStart in 0 until currentText.length &&
-                                        state.activeSentenceEnd in 1..currentText.length &&
-                                        state.activeSentenceEnd > state.activeSentenceStart
-                                    ) {
-                                        val startBox = result.getBoundingBox(state.activeSentenceStart)
-                                        val endBox = result.getBoundingBox(state.activeSentenceEnd - 1)
-                                        (startBox.top + endBox.bottom) * 0.5f
-                                    } else null
-                                }
-                            )
+                            SelectionContainer {
+                                Text(
+                                    text = renderedText,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .graphicsLayer {
+                                            translationY = verticalPageGeometry(
+                                                verticalViewport.offset, readerPageHeightPx.toFloat()
+                                            ).currentY
+                                        }
+                                        .pointerInput(currentText, state.layoutVersion) {
+                                            observeDoubleTapsWithoutConsuming(handleReaderDoubleTap)
+                                        },
+                                    fontSize = fontSizeSp.sp,
+                                    lineHeight = (fontSizeSp + 10).sp,
+                                    fontFamily = selectedFontFamily,
+                                    color = themeColors.text,
+                                    onTextLayout = { result ->
+                                        currentTextLayout = ReaderTextLayout(currentText, result)
+                                        activeSentenceCenterPx = if (
+                                            state.activeSentenceStart in 0 until currentText.length &&
+                                            state.activeSentenceEnd in 1..currentText.length &&
+                                            state.activeSentenceEnd > state.activeSentenceStart
+                                        ) {
+                                            val startBox = result.getBoundingBox(state.activeSentenceStart)
+                                            val endBox = result.getBoundingBox(state.activeSentenceEnd - 1)
+                                            (startBox.top + endBox.bottom) * 0.5f
+                                        } else null
+                                    }
+                                )
+                            }
                         }
                         if (state.previousPageText != null) {
                             Text(

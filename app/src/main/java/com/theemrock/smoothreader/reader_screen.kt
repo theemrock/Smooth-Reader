@@ -337,6 +337,9 @@ fun ReaderScreen(
      * ==========================================
      */
     val view = LocalView.current
+    val platformDoubleTapSlopPx = remember(view) {
+        android.view.ViewConfiguration.get(view.context).scaledDoubleTapSlop.toFloat()
+    }
 
     DisposableEffect(Unit) {
 
@@ -804,8 +807,14 @@ fun ReaderScreen(
                                                 verticalViewport.offset, readerPageHeightPx.toFloat()
                                             ).currentY
                                         }
-                                        .pointerInput(currentText, state.layoutVersion) {
-                                            observeDoubleTapsWithoutConsuming(handleReaderDoubleTap)
+                                        .pointerInput(
+                                            currentText,
+                                            state.layoutVersion,
+                                            platformDoubleTapSlopPx
+                                        ) {
+                                            observeDoubleTapsWithoutConsuming(platformDoubleTapSlopPx) {
+                                                handleReaderDoubleTap(it)
+                                            }
                                         },
                                     fontSize = fontSizeSp.sp,
                                     lineHeight = (fontSizeSp + 10).sp,

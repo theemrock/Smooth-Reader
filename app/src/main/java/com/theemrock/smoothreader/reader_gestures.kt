@@ -18,7 +18,8 @@ internal class NonConsumingDoubleTapClassifier(
     private val doubleTapMinTimeMillis: Long,
     private val doubleTapTimeoutMillis: Long,
     private val longPressTimeoutMillis: Long,
-    private val touchSlop: Float
+    private val touchSlop: Float,
+    private val doubleTapSlop: Float
 ) {
     private var firstTap: ObservedTapGesture? = null
 
@@ -38,7 +39,6 @@ internal class NonConsumingDoubleTapClassifier(
             val interval = tap.downTimeMillis - first.upTimeMillis
             val dx = tap.x - first.x
             val dy = tap.y - first.y
-            val doubleTapSlop = touchSlop * 2f
             if (interval in doubleTapMinTimeMillis..doubleTapTimeoutMillis &&
                 dx * dx + dy * dy <= doubleTapSlop * doubleTapSlop
             ) {
@@ -53,13 +53,15 @@ internal class NonConsumingDoubleTapClassifier(
 }
 
 internal suspend fun PointerInputScope.observeDoubleTapsWithoutConsuming(
+    doubleTapSlop: Float,
     onDoubleTap: (Offset) -> Unit
 ) {
     val classifier = NonConsumingDoubleTapClassifier(
         doubleTapMinTimeMillis = viewConfiguration.doubleTapMinTimeMillis,
         doubleTapTimeoutMillis = viewConfiguration.doubleTapTimeoutMillis,
         longPressTimeoutMillis = viewConfiguration.longPressTimeoutMillis,
-        touchSlop = viewConfiguration.touchSlop
+        touchSlop = viewConfiguration.touchSlop,
+        doubleTapSlop = doubleTapSlop
     )
     awaitEachGesture {
         val down = awaitFirstDown(

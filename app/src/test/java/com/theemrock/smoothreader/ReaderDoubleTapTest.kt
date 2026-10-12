@@ -5,11 +5,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReaderDoubleTapTest {
-    private fun classifier() = NonConsumingDoubleTapClassifier(
+    private fun classifier(doubleTapSlop: Float = 20f) = NonConsumingDoubleTapClassifier(
         doubleTapMinTimeMillis = 40,
         doubleTapTimeoutMillis = 300,
         longPressTimeoutMillis = 500,
-        touchSlop = 10f
+        touchSlop = 10f,
+        doubleTapSlop = doubleTapSlop
     )
 
     @Test fun twoShortNearbyTapsProduceExactlyOneDoubleTap() {
@@ -44,6 +45,13 @@ class ReaderDoubleTapTest {
         val distance = classifier()
         assertFalse(distance.observe(tap(down = 0, up = 40, x = 0f, y = 0f)))
         assertFalse(distance.observe(tap(down = 100, up = 140, x = 25f, y = 0f)))
+    }
+
+    @Test fun secondTapUsesPlatformDoubleTapSlopRatherThanDragSlop() {
+        val classifier = classifier(doubleTapSlop = 100f)
+
+        assertFalse(classifier.observe(tap(down = 0, up = 40, x = 0f, y = 0f)))
+        assertTrue(classifier.observe(tap(down = 100, up = 140, x = 25f, y = 0f)))
     }
 
     private fun tap(

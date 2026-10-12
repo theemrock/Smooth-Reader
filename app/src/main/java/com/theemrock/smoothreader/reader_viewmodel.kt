@@ -319,12 +319,23 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         val session = readingSession ?: return false
         val page = session.pages.getOrNull(session.pageIndex) ?: return false
         val position = canonicalWordStartForPageOffset(session.source, page, localOffset) ?: return false
+        selectCanonicalPlaybackStart(position)
+        return true
+    }
+
+    private fun selectCanonicalPlaybackStart(position: ReadingPosition) {
         playbackPreparation = playbackPreparation?.copy(position = position)
             ?.also(playbackBindingState::updatePreparation)
         playbackBindingState.selectStart(position)
         ensurePlaybackBound()
         applyPlaybackConnection()
-        return true
+    }
+
+    fun seekToBookProgress(progress: Float) {
+        val session = readingSession ?: return
+        selectCanonicalPlaybackStart(
+            canonicalPositionForBookProgress(session.source, progress)
+        )
     }
 
     /*
@@ -562,6 +573,14 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun nextPage() {
         navigateWindow(1)
+    }
+
+    fun navigateByScreen(direction: Int) {
+        if (direction != -1 && direction != 1) return
+        playbackBindingState.requestPause()
+        playbackBinder?.takeIf { it.state.value.isPlaying }
+            ?.pause("intentionalScreenNavigation")
+        navigateWindow(direction)
     }
     /*
      * ==========================================

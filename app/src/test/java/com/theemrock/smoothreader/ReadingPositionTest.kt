@@ -23,6 +23,15 @@ class ReadingPositionTest {
         assertEquals(ReadingPosition(0, 4), s.positionAt(5)) // separator
     }
 
+    @Test fun bookProgressMapsToCanonicalPositionsAndClampsAtBothEnds() {
+        val progressSource = ReadingSource(listOf("abcd", "uvwxyz"))
+
+        assertEquals(ReadingPosition(0, 0), canonicalPositionForBookProgress(progressSource, -1f))
+        assertEquals(ReadingPosition(0, 3), canonicalPositionForBookProgress(progressSource, 0.25f))
+        assertEquals(ReadingPosition(1, 0), canonicalPositionForBookProgress(progressSource, 0.5f))
+        assertEquals(ReadingPosition(1, 6), canonicalPositionForBookProgress(progressSource, 2f))
+    }
+
     @Test fun mapsFirstMiddleLastAndNonzeroCharacterOffset() {
         assertEquals(0, pageForPosition(pages, ReadingPosition()))
         assertEquals(2, pageForPosition(pages, ReadingPosition(1, 3)))

@@ -24,6 +24,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Pause
@@ -36,8 +38,9 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -79,6 +82,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /*
  * ==========================================
@@ -243,6 +247,10 @@ fun ReaderScreen(
      */
     var showPageDialog by remember {
         mutableStateOf(false)
+    }
+
+    var progressPreview by remember(state.contentVersion) {
+        mutableStateOf<Float?>(null)
     }
 
     /*
@@ -893,24 +901,60 @@ fun ReaderScreen(
                      * PROGRESS
                      * ==========================================
                      */
-                    LinearProgressIndicator(
+                    val displayedProgress = progressPreview
+                        ?: state.readingFraction.coerceIn(0f, 1f)
 
-                        progress = {
-                            if (state.totalPages > 0 && state.globalPageNumber != null) {
-                                (state.globalPageNumber ?: 0).toFloat() / state.totalPages
-                            } else {
-                                state.readingFraction
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(5.dp)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = {
+                                progressPreview = null
+                                viewModel.navigateByScreen(-1)
+                            },
+                            enabled = !state.isLoading && !state.isPreparingPages &&
+                                state.globalPageNumber != 1
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowUp,
+                                contentDescription = "Önceki ekran",
+                                tint = themeColors.text
+                            )
+                        }
 
-                    Spacer(
-                        modifier =
-                            Modifier.height(6.dp)
-                    )
+                        Slider(
+                            value = displayedProgress,
+                            onValueChange = { progressPreview = it.coerceIn(0f, 1f) },
+                            onValueChangeFinished = {
+                                progressPreview?.let(viewModel::seekToBookProgress)
+                                progressPreview = null
+                            },
+                            enabled = !state.isLoading && !state.isPreparingPages,
+                            modifier = Modifier.weight(1f),
+                            colors = SliderDefaults.colors(
+                                thumbColor = themeColors.text,
+                                activeTrackColor = themeColors.text,
+                                inactiveTrackColor = themeColors.text.copy(alpha = 0.24f)
+                            )
+                        )
+
+                        IconButton(
+                            onClick = {
+                                progressPreview = null
+                                viewModel.navigateByScreen(1)
+                            },
+                            enabled = !state.isLoading && !state.isPreparingPages &&
+                                !(state.totalPages > 0 &&
+                                    state.globalPageNumber == state.totalPages)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowDown,
+                                contentDescription = "Sonraki ekran",
+                                tint = themeColors.text
+                            )
+                        }
+                    }
 
                     /*
                      * ==========================================
@@ -918,7 +962,9 @@ fun ReaderScreen(
                      * ==========================================
                      */
                     Text(
-                        text = if (state.totalPages > 0 && state.globalPageNumber != null) {
+                        text = if (progressPreview != null) {
+                            "%${(displayedProgress * 100).roundToInt()}"
+                        } else if (state.totalPages > 0 && state.globalPageNumber != null) {
                             "${state.globalPageNumber} / ${state.totalPages}"
                         } else {
                             "${state.globalPageNumber ?: "…"} / …"

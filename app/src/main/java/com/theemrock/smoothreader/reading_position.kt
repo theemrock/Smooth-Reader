@@ -1,5 +1,7 @@
 package com.theemrock.smoothreader
 
+import kotlin.math.roundToInt
+
 data class ReadingPage(
     val text: String,
     val start: ReadingPosition,
@@ -78,6 +80,13 @@ internal class ReadingSource(val paragraphs: List<String>) {
 internal fun comparePositions(a: ReadingPosition, b: ReadingPosition): Int =
     if (a.paragraphIndex != b.paragraphIndex) a.paragraphIndex.compareTo(b.paragraphIndex)
     else a.characterOffset.compareTo(b.characterOffset)
+
+internal fun canonicalPositionForBookProgress(
+    source: ReadingSource,
+    progress: Float
+): ReadingPosition = source.positionAt(
+    (source.length * progress.coerceIn(0f, 1f)).roundToInt()
+)
 
 internal fun pageForPosition(pages: List<ReadingPage>, position: ReadingPosition): Int =
     pages.indexOfLast { comparePositions(it.start, position) <= 0 }.coerceAtLeast(0)

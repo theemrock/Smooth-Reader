@@ -29,6 +29,10 @@ internal class ReaderPlaybackBindingState {
         playRequested = true
     }
 
+    fun requestPause() {
+        playRequested = false
+    }
+
     fun selectStart(position: ReadingPosition) {
         preparation = preparation?.copy(position = position)
         selectedStart = position

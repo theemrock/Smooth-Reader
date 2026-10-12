@@ -91,7 +91,8 @@ internal enum class ReaderTheme {
 internal data class ReaderThemeColors(
     val background: Color,
     val text: Color,
-    val highlight: Color
+    val highlight: Color,
+    val activeText: Color
 )
 
 private data class ReaderPaper(
@@ -109,7 +110,8 @@ internal fun themeColorsFor(
             ReaderThemeColors(
                 background = Color.White,
                 text = Color.Black,
-                highlight = Color(0x4019C3E6)
+                highlight = Color(0x4019C3E6),
+                activeText = Color.Black
             )
         }
 
@@ -117,7 +119,8 @@ internal fun themeColorsFor(
             ReaderThemeColors(
                 background = Color(0xFF121212),
                 text = Color(0xFFE0E0E0),
-                highlight = Color(0x5919C3E6)
+                highlight = Color(0x59F0B84B),
+                activeText = Color(0xFFE0E0E0)
             )
         }
 
@@ -125,7 +128,8 @@ internal fun themeColorsFor(
             ReaderThemeColors(
                 background = Color(0xFFF5ECD9),
                 text = Color(0xFF4A3728),
-                highlight = Color(0x4DF0B84B)
+                highlight = Color(0xFFE87A1E),
+                activeText = Color(0xFF2E86DE)
             )
         }
     }
@@ -135,7 +139,8 @@ internal fun highlightedReaderText(
     text: String,
     activeStart: Int,
     activeEnd: Int,
-    highlight: Color
+    highlight: Color,
+    activeText: Color
 ): AnnotatedString = buildAnnotatedString {
     append(text)
     if (activeStart in 0 until text.length &&
@@ -143,7 +148,7 @@ internal fun highlightedReaderText(
         activeEnd > activeStart
     ) {
         addStyle(
-            SpanStyle(background = highlight),
+            SpanStyle(color = activeText, background = highlight),
             activeStart,
             activeEnd
         )
@@ -777,7 +782,8 @@ fun ReaderScreen(
                                 text = currentText,
                                 activeStart = state.activeSentenceStart,
                                 activeEnd = state.activeSentenceEnd,
-                                highlight = themeColors.highlight
+                                highlight = themeColors.highlight,
+                                activeText = themeColors.activeText
                             )
                             Text(
                                 text = renderedText,

@@ -220,25 +220,43 @@ class ReaderProgressionTest {
             text = "Bir. İki.",
             activeStart = 5,
             activeEnd = 8,
-            highlight = Color(0x4019C3E6)
+            highlight = Color(0xFFE87A1E),
+            activeText = Color(0xFF2E86DE)
         )
 
         val span = rendered.spanStyles.single()
         assertEquals(5, span.start)
         assertEquals(8, span.end)
-        assertEquals(Color(0x4019C3E6), span.item.background)
+        assertEquals(Color(0xFFE87A1E), span.item.background)
+        assertEquals(Color(0xFF2E86DE), span.item.color)
         assertEquals(TextUnit.Unspecified, span.item.fontSize)
+        assertEquals(TextUnit.Unspecified, span.item.letterSpacing)
         assertNull(span.item.fontWeight)
+        assertNull(span.item.fontFamily)
+        assertTrue(rendered.paragraphStyles.isEmpty())
     }
 
-    @Test fun readerThemeHighlightsRemainVisibleAndReadable() {
-        ReaderTheme.entries.forEach { theme ->
+    @Test fun readerThemeHighlightColorsMatchApprovedPalette() {
+        val day = themeColorsFor(ReaderTheme.GUNDUZ)
+        assertEquals(Color(0x4019C3E6), day.highlight)
+        assertEquals(Color.Black, day.activeText)
+
+        val night = themeColorsFor(ReaderTheme.GECE)
+        assertEquals(Color(0x59F0B84B), night.highlight)
+        assertEquals(Color(0xFFE0E0E0), night.activeText)
+
+        val sepia = themeColorsFor(ReaderTheme.SEPYA)
+        assertEquals(Color(0xFFE87A1E), sepia.highlight)
+        assertEquals(Color(0xFF2E86DE), sepia.activeText)
+    }
+
+    @Test fun dayAndNightActiveTextRemainReadableOverHighlight() {
+        listOf(ReaderTheme.GUNDUZ, ReaderTheme.GECE).forEach { theme ->
             val colors = themeColorsFor(theme)
             val paintedBackground = colors.highlight.compositeOver(colors.background)
 
-            assertTrue(colors.highlight.alpha in 0.20f..0.40f)
             assertTrue(contrastRatio(paintedBackground, colors.background) >= 1.10f)
-            assertTrue(contrastRatio(colors.text, paintedBackground) >= 4.50f)
+            assertTrue(contrastRatio(colors.activeText, paintedBackground) >= 4.50f)
         }
     }
 

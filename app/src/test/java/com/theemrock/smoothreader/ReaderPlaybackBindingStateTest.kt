@@ -113,12 +113,14 @@ class ReaderPlaybackBindingStateTest {
 
     @Test fun intentionalNavigationCancelsAPlayRequestBeforeServiceConnection() {
         val state = ReaderPlaybackBindingState()
+        state.updatePreparation(preparation())
+        state.selectStart(ReadingPosition(0, 5))
         state.requestPlay()
 
         state.requestPause()
-        state.updatePreparation(preparation())
         val actions = state.connected(PlaybackSnapshot())
 
         assertFalse(actions.startPlayback)
+        assertNull(actions.selectedStart)
     }
 }

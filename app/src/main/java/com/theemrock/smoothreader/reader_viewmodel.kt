@@ -333,8 +333,11 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     fun seekToBookProgress(progress: Float) {
         val session = readingSession ?: return
-        selectCanonicalPlaybackStart(
-            canonicalPositionForBookProgress(session.source, progress)
+        val position = canonicalPositionForBookProgress(session.source, progress)
+        selectCanonicalPlaybackStart(position)
+        projectPlaybackPosition(
+            position,
+            playbackBinder?.state?.value?.generation ?: 0L
         )
     }
 
@@ -446,6 +449,8 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                     pageRequest = null
                     readyTicket = engine.ticket
                     if (changed) {
+                        playbackPreparation = playbackPreparation?.copy(position = session.position)
+                            ?.also(playbackBindingState::updatePreparation)
                         playbackBinder?.seek(
                             session.position,
                             restartIfPlaying = true,

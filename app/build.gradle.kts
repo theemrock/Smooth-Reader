@@ -15,8 +15,8 @@ android {
         applicationId = "com.theemrock.smoothreader"
         minSdk = 33
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 12001
+        versionName = "v0.0.12.001"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

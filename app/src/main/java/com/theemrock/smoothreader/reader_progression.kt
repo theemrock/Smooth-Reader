@@ -192,11 +192,6 @@ internal fun utteranceVolume(isSoundEnabled: Boolean): Float = if (isSoundEnable
 internal fun acceptsSpeechGeneration(callbackGeneration: Long, state: PlaybackControlState): Boolean =
     callbackGeneration == state.generation
 
-internal data class ActiveSentenceStyle(val fontSizeSp: Float, val bold: Boolean)
-
-internal fun activeSentenceStyle(readerFontSizeSp: Float) =
-    ActiveSentenceStyle(fontSizeSp = readerFontSizeSp + 2f, bold = true)
-
 internal data class DragProgressionState(val isPlaying: Boolean, val resumeAutomatically: Boolean)
 
 internal fun progressionAfterDrag(mode: ReadingMode, isPlaying: Boolean): DragProgressionState {

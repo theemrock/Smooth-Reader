@@ -1,5 +1,9 @@
 package com.theemrock.smoothreader
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.TextUnit
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -149,10 +153,31 @@ class ReaderProgressionTest {
         assertTrue(acceptsSpeechGeneration(callbackGeneration = 21, transition.state))
     }
 
-    @Test fun activeSentenceStyleIsTwoSpLargerAndBold() {
-        val style = activeSentenceStyle(18f)
-        assertEquals(20f, style.fontSizeSp, 0f)
-        assertTrue(style.bold)
+    @Test fun activeSentenceHighlightUsesExactRangeWithoutChangingTextMetrics() {
+        val rendered = highlightedReaderText(
+            text = "Bir. İki.",
+            activeStart = 5,
+            activeEnd = 8,
+            highlight = Color(0x4019C3E6)
+        )
+
+        val span = rendered.spanStyles.single()
+        assertEquals(5, span.start)
+        assertEquals(8, span.end)
+        assertEquals(Color(0x4019C3E6), span.item.background)
+        assertEquals(TextUnit.Unspecified, span.item.fontSize)
+        assertNull(span.item.fontWeight)
+    }
+
+    @Test fun readerThemeHighlightsRemainVisibleAndReadable() {
+        ReaderTheme.entries.forEach { theme ->
+            val colors = themeColorsFor(theme)
+            val paintedBackground = colors.highlight.compositeOver(colors.background)
+
+            assertTrue(colors.highlight.alpha in 0.20f..0.40f)
+            assertTrue(contrastRatio(paintedBackground, colors.background) >= 1.10f)
+            assertTrue(contrastRatio(colors.text, paintedBackground) >= 4.50f)
+        }
     }
 
     @Test fun manualVerticalDragPausesWithoutAutomaticRestart() {
@@ -183,4 +208,10 @@ class ReaderProgressionTest {
         assertEquals(position, update.position)
         assertEquals(1, update.targetPageDirection)
     }
+}
+
+private fun contrastRatio(first: Color, second: Color): Float {
+    val lighter = maxOf(first.luminance(), second.luminance())
+    val darker = minOf(first.luminance(), second.luminance())
+    return (lighter + 0.05f) / (darker + 0.05f)
 }

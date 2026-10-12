@@ -82,15 +82,16 @@ import kotlinx.coroutines.launch
  * OKUMA TEMALARI
  * ==========================================
  */
-private enum class ReaderTheme {
+internal enum class ReaderTheme {
     GECE,
     GUNDUZ,
     SEPYA
 }
 
-private data class ReaderThemeColors(
+internal data class ReaderThemeColors(
     val background: Color,
-    val text: Color
+    val text: Color,
+    val highlight: Color
 )
 
 private data class ReaderPaper(
@@ -98,7 +99,7 @@ private data class ReaderPaper(
     val alpha: Float
 )
 
-private fun themeColorsFor(
+internal fun themeColorsFor(
     theme: ReaderTheme
 ): ReaderThemeColors {
 
@@ -107,23 +108,45 @@ private fun themeColorsFor(
         ReaderTheme.GUNDUZ -> {
             ReaderThemeColors(
                 background = Color.White,
-                text = Color.Black
+                text = Color.Black,
+                highlight = Color(0x4019C3E6)
             )
         }
 
         ReaderTheme.GECE -> {
             ReaderThemeColors(
                 background = Color(0xFF121212),
-                text = Color(0xFFE0E0E0)
+                text = Color(0xFFE0E0E0),
+                highlight = Color(0x5919C3E6)
             )
         }
 
         ReaderTheme.SEPYA -> {
             ReaderThemeColors(
                 background = Color(0xFFF5ECD9),
-                text = Color(0xFF4A3728)
+                text = Color(0xFF4A3728),
+                highlight = Color(0x4DF0B84B)
             )
         }
+    }
+}
+
+internal fun highlightedReaderText(
+    text: String,
+    activeStart: Int,
+    activeEnd: Int,
+    highlight: Color
+): AnnotatedString = buildAnnotatedString {
+    append(text)
+    if (activeStart in 0 until text.length &&
+        activeEnd in 1..text.length &&
+        activeEnd > activeStart
+    ) {
+        addStyle(
+            SpanStyle(background = highlight),
+            activeStart,
+            activeEnd
+        )
     }
 }
 
@@ -751,21 +774,12 @@ fun ReaderScreen(
                         run {
                             val renderedText = if (currentText.isEmpty()) {
                                 AnnotatedString(if (state.isPreparingPages) "Sayfa hazırlanıyor…" else "Sayfa hazırlanamadı.")
-                            } else buildAnnotatedString {
-                                append(currentText)
-                                if (state.activeSentenceStart in 0 until currentText.length &&
-                                    state.activeSentenceEnd in 1..currentText.length &&
-                                    state.activeSentenceEnd > state.activeSentenceStart) {
-                                    addStyle(
-                                        SpanStyle(
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = activeSentenceStyle(fontSizeSp).fontSizeSp.sp
-                                        ),
-                                        state.activeSentenceStart,
-                                        state.activeSentenceEnd
-                                    )
-                                }
-                            }
+                            } else highlightedReaderText(
+                                text = currentText,
+                                activeStart = state.activeSentenceStart,
+                                activeEnd = state.activeSentenceEnd,
+                                highlight = themeColors.highlight
+                            )
                             Text(
                                 text = renderedText,
                                 modifier = Modifier

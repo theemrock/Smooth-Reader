@@ -78,7 +78,10 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     private val progressStore =
         ProgressStore(app.applicationContext)
     private val legacyProgressStore = ReaderProgressStore(app.applicationContext)
+    private val highlightStore = HighlightStore(app.applicationContext)
     private var readingSession: ReadingSession? = null
+    /** False while reading from a highlight: nothing may move the saved progress. */
+    private var progressWritesEnabled = true
     private var loadVersion = 0L
     private val progressWriteMutex = Mutex()
     private var migrationPending = false
@@ -165,7 +168,8 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                 preparation.position,
                 preparation.title,
                 preparation.author,
-                preparation.mode
+                preparation.mode,
+                preparation.persistProgress
             )
         }
         actions.snapshotToApply?.let(::applyPlaybackSnapshot)
@@ -199,8 +203,9 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
      * ==========================================
      */
     @Suppress("UNUSED_PARAMETER")
-    fun load(bookId: String, mode: ReadingMode = ReadingMode.READ) {
+    fun load(bookId: String, mode: ReadingMode = ReadingMode.READ, jumpOffset: Int? = null) {
         currentBookId = bookId
+        progressWritesEnabled = jumpOffset == null
         currentMode = mode
         currentMetadata = ReaderBookMetadata("Kitap", null)
         playbackPreparation = null
@@ -242,11 +247,12 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                 val parsed = ParsedCache.get(bookId)
                 require(parsed != null && parsed.paragraphs.any { it.isNotBlank() })
                 val (stored, canonical) = progressStore.storedProgress(bookId).first()
-                val legacyPage = if (canonical) null else legacyProgressStore.loadPage(bookId).first()
+                val legacyPage = if (canonical || jumpOffset != null) null else legacyProgressStore.loadPage(bookId).first()
                 val source = withContext(Dispatchers.Default) { ReadingSource(parsed.paragraphs) }
                 if (version != loadVersion) return@launch
                 val session = ReadingSession(
-                    source, stored?.position ?: ReadingPosition(),
+                    source,
+                    jumpOffset?.let { source.positionAt(it) } ?: stored?.position ?: ReadingPosition(),
                     legacyPage, canonical
                 )
                 readingSession = session
@@ -258,6 +264,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                     bookId = bookId,
                     source = source,
                     position = session.position,
+                    persistProgress = progressWritesEnabled,
                     title = currentMetadata.title,
                     author = currentMetadata.author,
                     mode = currentMode
@@ -315,6 +322,39 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     }
 
+    /** Saves the selected text as a highlight of the current page. Returns false if it is not on this page. */
+    fun createHighlight(selectedText: String, localStart: Int): Boolean {
+        val bookId = currentBookId ?: return false
+        val session = readingSession ?: return false
+        val page = session.pages.getOrNull(session.pageIndex) ?: return false
+        if (selectedText.isBlank() || localStart < 0) return false
+        val pageStart = session.source.offsetOf(page.start)
+        val pageEnd = session.source.offsetOf(page.end)
+        val start = pageStart + localStart
+        if (start < pageStart || start >= pageEnd) return false
+        if (!session.source.text.regionMatches(start, selectedText, 0, selectedText.length)) return false
+        val highlight = newHighlight(
+            bookId = bookId,
+            bookTitle = currentMetadata.title,
+            bookAuthor = currentMetadata.author,
+            text = selectedText,
+            startOffset = start
+        )
+        viewModelScope.launch { highlightStore.add(highlight) }
+        return true
+    }
+
+    /** Highlight ranges, relative to the current page text, for the highlights of this book. */
+    internal fun highlightRangesForCurrentPage(highlights: List<Highlight>): List<IntRange> {
+        val bookId = currentBookId ?: return emptyList()
+        val session = readingSession ?: return emptyList()
+        val page = session.pages.getOrNull(session.pageIndex) ?: return emptyList()
+        return highlightRangesForPage(
+            highlights, bookId,
+            session.source.offsetOf(page.start), session.source.offsetOf(page.end)
+        )
+    }
+
     fun selectTtsStartAtPageOffset(localOffset: Int): Boolean {
         val session = readingSession ?: return false
         val page = session.pages.getOrNull(session.pageIndex) ?: return false
@@ -333,7 +373,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
 
     fun seekToBookProgress(progress: Float) {
         val session = readingSession ?: return
-        val position = canonicalPositionForBookProgress(session.source, progress)
+        val position = canonicalWordStartForBookProgress(session.source, progress)
         selectCanonicalPlaybackStart(position)
         projectPlaybackPosition(
             position,
@@ -544,7 +584,7 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
             return
         }
         val active = engine.block(activeBlock) ?: return
-        val targetIndex = session.pageIndex + direction
+        val targetIndex = navigationTargetIndex(active.pages.toList(), session.position, direction)
         val request = when {
             targetIndex in active.pages.indices -> PageRequest(activeBlock, targetIndex)
             direction > 0 && !active.complete -> PageRequest(activeBlock, targetIndex)
@@ -813,6 +853,10 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         position: ReadingPosition,
         onlyIfAbsent: Boolean = false
     ) {
+        if (!progressWritesEnabled) {
+            if (onlyIfAbsent && readingSession === session) migrationPending = false
+            return
+        }
         val bookId = currentBookId ?: return
         val progress = ReadingProgress(bookId, position, session.source.paragraphs.size)
         // Enter immediately and finish queued writes in order even if this screen is closed.

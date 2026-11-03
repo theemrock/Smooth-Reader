@@ -15,15 +15,33 @@ android {
         applicationId = "com.theemrock.smoothreader"
         minSdk = 33
         targetSdk = 36
-        versionCode = 14001
-        versionName = "v0.0.14.001"
+        versionCode = 14002
+        versionName = "v0.0.14.002"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            // Filled from CI secrets (see .github/workflows/release-apk.yml); absent locally.
+            val keystorePath = System.getenv("SR_KEYSTORE_PATH")
+            if (keystorePath != null) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("SR_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("SR_KEY_ALIAS")
+                keyPassword = System.getenv("SR_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = if (System.getenv("SR_KEYSTORE_PATH") != null) {
+                signingConfigs.getByName("release")
+            } else {
+                null
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

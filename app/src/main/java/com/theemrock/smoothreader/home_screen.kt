@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,9 +27,12 @@ import com.theemrock.smoothreader.ui.theme.SmoothSpacing
 @Composable
 fun HomeScreen(
     onOpenBook: (String) -> Unit,
+    onOpenSettings: () -> Unit = {},
+    onOpenHighlights: () -> Unit = {},
     vm: HomeViewModel = viewModel()
 ) {
     val state by vm.uiState.collectAsState()
+    var menuExpanded by remember { mutableStateOf(false) }
 
     val docPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
@@ -45,6 +49,32 @@ fun HomeScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(Icons.Filled.Menu, contentDescription = "Menü")
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Yer imleri") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onOpenHighlights()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Ayarlar") },
+                                onClick = {
+                                    menuExpanded = false
+                                    onOpenSettings()
+                                }
+                            )
+                        }
+                    }
+                },
                 title = {
                     Text("Kütüphane", style = MaterialTheme.typography.titleLarge)
                 }

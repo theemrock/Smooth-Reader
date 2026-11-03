@@ -5,7 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -60,6 +60,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.paint
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
+import androidx.compose.material3.Surface
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -147,14 +156,39 @@ internal fun themeColorsFor(
     }
 }
 
+/** Sentence bounds around [offset] (ends at . ! ? … or line break); empty for blank text. */
+internal fun sentenceRangeAt(text: String, offset: Int): IntRange {
+    if (text.isBlank()) return IntRange.EMPTY
+    fun isEnd(c: Char) = c == '.' || c == '!' || c == '?' || c == '…' || c == '\n'
+    val at = offset.coerceIn(0, text.lastIndex)
+    var start = at
+    var end = at
+    while (start > 0 && !isEnd(text[start - 1])) start--
+    while (end < text.lastIndex && !isEnd(text[end])) end++
+    // include the terminator and any closing quotes/brackets right after it
+    while (end < text.lastIndex && (text[end + 1] == '”' || text[end + 1] == '"' || text[end + 1] == ')' || text[end + 1] == '.')) end++
+    val range = start until (end + 1)
+    val trimmed = text.substring(range.first, range.last + 1).trim()
+    if (trimmed.isEmpty()) return IntRange.EMPTY
+    val lead = text.substring(range.first, range.last + 1).indexOfFirst { !it.isWhitespace() }
+    val first = range.first + lead
+    return first until (first + trimmed.length)
+}
+
 internal fun highlightedReaderText(
     text: String,
     activeStart: Int,
     activeEnd: Int,
     highlight: Color,
-    activeText: Color
+    activeText: Color,
+    userRanges: List<IntRange> = emptyList()
 ): AnnotatedString = buildAnnotatedString {
     append(text)
+    for (range in userRanges) {
+        if (range.first in 0 until text.length) {
+            addStyle(SpanStyle(background = highlight), range.first, minOf(range.last + 1, text.length))
+        }
+    }
     if (activeStart in 0 until text.length &&
         activeEnd in 1..text.length &&
         activeEnd > activeStart
@@ -178,13 +212,7 @@ private fun paperFor(theme: ReaderTheme): ReaderPaper = when (theme) {
  * FONT TİPLERİ
  * ==========================================
  */
-private enum class ReaderFontType {
-    SANS,
-    SERIF,
-    MONOSPACE
-}
-
-private val FONT_SIZE_OPTIONS = listOf(
+internal val FONT_SIZE_OPTIONS = listOf(
     16f,
     18f,
     20f,
@@ -201,12 +229,24 @@ private val FONT_SIZE_OPTIONS = listOf(
 fun ReaderScreen(
     bookId: String,
     mode: ReadingMode,
+    jumpOffset: Int? = null,
     onBack: () -> Unit,
     viewModel: ReaderViewModel = viewModel()
 ) {
 
     val state by viewModel.uiState.collectAsState()
     val latestState by rememberUpdatedState(state)
+
+    val appContext = LocalContext.current
+    val settingsStore = remember { ReaderSettingsStore(appContext) }
+    val settings by settingsStore.settings.collectAsState(initial = ReaderSettings.defaults())
+
+    val highlightStore = remember { HighlightStore(appContext) }
+    val bookHighlights by remember(bookId) { highlightStore.forBook(bookId) }
+        .collectAsState(initial = emptyList())
+    val selectionActions = remember { ReaderSelectionActions() }
+    val clipboardBridge = remember(appContext) { ReaderClipboardManager(appContext, selectionActions) }
+    val textToolbarBridge = remember { ReaderTextToolbar(selectionActions) }
     val exitReader = {
         viewModel.exitReader()
         onBack()
@@ -288,6 +328,16 @@ fun ReaderScreen(
         )
     }
 
+    // Stored settings seed the reader's font state; user changes are written back.
+    LaunchedEffect(settings.fontSizeSp) { fontSizeSp = settings.fontSizeSp }
+    LaunchedEffect(fontSizeSp) {
+        if (fontSizeSp != settings.fontSizeSp) settingsStore.setFontSizeSp(fontSizeSp)
+    }
+    LaunchedEffect(settings.fontType) { fontType = settings.fontType }
+    LaunchedEffect(fontType) {
+        if (fontType != settings.fontType) settingsStore.setFontType(fontType)
+    }
+
     var verticalViewport by remember {
         mutableStateOf(VerticalViewportState(VerticalViewportOwner.IDLE, 0f))
     }
@@ -297,6 +347,7 @@ fun ReaderScreen(
     var readerPageHeightPx by remember { mutableStateOf(1) }
     var activeSentenceCenterPx by remember { mutableStateOf<Float?>(null) }
     var currentTextLayout by remember { mutableStateOf<ReaderTextLayout?>(null) }
+    var pendingMark by remember { mutableStateOf<Pair<IntRange, Offset>?>(null) }
     var listenMotion by remember { mutableStateOf(ListenTrackingMotion(0f, 0f, 0f)) }
 
     /*
@@ -304,8 +355,8 @@ fun ReaderScreen(
      * TEMA RENKLERİ
      * ==========================================
      */
-    val themeColors = remember(readerTheme) {
-        themeColorsFor(readerTheme)
+    val themeColors = remember(readerTheme, settings) {
+        settings.colorsFor(readerTheme)
     }
     val readerPaper = remember(readerTheme) {
         paperFor(readerTheme)
@@ -388,9 +439,9 @@ fun ReaderScreen(
      * KİTABI YÜKLE
      * ==========================================
      */
-    LaunchedEffect(bookId, mode) {
+    LaunchedEffect(bookId, mode, jumpOffset) {
 
-        viewModel.load(bookId, mode)
+        viewModel.load(bookId, mode, jumpOffset)
     }
 
     /*
@@ -542,7 +593,6 @@ fun ReaderScreen(
         }
         LaunchedEffect(currentText) {
             activeSentenceCenterPx = null
-            currentTextLayout = null
             viewModel.setCurrentPageText(
                 currentText
             )
@@ -796,6 +846,9 @@ fun ReaderScreen(
                     ) {
 
                         run {
+                            val userRanges = remember(currentText, bookHighlights) {
+                                viewModel.highlightRangesForCurrentPage(bookHighlights)
+                            }
                             val renderedText = if (currentText.isEmpty()) {
                                 AnnotatedString(if (state.isPreparingPages) "Sayfa hazırlanıyor…" else "Sayfa hazırlanamadı.")
                             } else highlightedReaderText(
@@ -803,9 +856,14 @@ fun ReaderScreen(
                                 activeStart = state.activeSentenceStart,
                                 activeEnd = state.activeSentenceEnd,
                                 highlight = themeColors.highlight,
-                                activeText = themeColors.activeText
+                                activeText = themeColors.activeText,
+                                userRanges = userRanges
                             )
-                            SelectionContainer {
+                            CompositionLocalProvider(
+                                LocalClipboardManager provides clipboardBridge,
+                                LocalTextToolbar provides textToolbarBridge
+                            ) {
+                            run {
                                 Text(
                                     text = renderedText,
                                     modifier = Modifier
@@ -823,6 +881,16 @@ fun ReaderScreen(
                                             observeDoubleTapsWithoutConsuming(platformDoubleTapSlopPx) {
                                                 handleReaderDoubleTap(it)
                                             }
+                                        }
+                                        .pointerInput(currentText, state.layoutVersion) {
+                                            detectTapGestures(onLongPress = { pos ->
+                                                val layout = currentTextLayout?.takeIf { it.text == currentText }?.result
+                                                    ?: return@detectTapGestures
+                                                val offset = layout.getOffsetForPosition(pos).coerceIn(0, currentText.lastIndex)
+                                                sentenceRangeAt(currentText, offset).takeIf { !it.isEmpty() }?.let {
+                                                    pendingMark = it to pos
+                                                }
+                                            })
                                         },
                                     fontSize = fontSizeSp.sp,
                                     lineHeight = (fontSizeSp + 10).sp,
@@ -841,6 +909,59 @@ fun ReaderScreen(
                                         } else null
                                     }
                                 )
+                            }
+                            }
+                            selectionActions.menu?.let { menu ->
+                                Popup(
+                                    alignment = Alignment.TopStart,
+                                    offset = IntOffset(
+                                        menu.rect.left.roundToInt(),
+                                        (menu.rect.top - 150f).roundToInt().coerceAtLeast(0)
+                                    ),
+                                    onDismissRequest = { selectionActions.menu = null }
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        shadowElevation = 6.dp,
+                                        color = MaterialTheme.colorScheme.surface
+                                    ) {
+                                        Row {
+                                            TextButton(onClick = {
+                                                selectionActions.highlightRequested = true
+                                                selectionActions.menu = null
+                                                menu.onCopy?.invoke()
+                                            }) { Text("İşaretle") }
+                                            TextButton(onClick = {
+                                                selectionActions.highlightRequested = false
+                                                selectionActions.menu = null
+                                                menu.onCopy?.invoke()
+                                            }) { Text("Kopyala") }
+                                            TextButton(onClick = {
+                                                selectionActions.menu = null
+                                                menu.onSelectAll?.invoke()
+                                            }) { Text("Tümünü seç") }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        pendingMark?.let { (range, pos) ->
+                            Popup(
+                                alignment = Alignment.TopStart,
+                                offset = IntOffset(pos.x.roundToInt(), (pos.y - 150f).roundToInt().coerceAtLeast(0)),
+                                onDismissRequest = { pendingMark = null }
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    shadowElevation = 6.dp,
+                                    color = MaterialTheme.colorScheme.surface
+                                ) {
+                                    TextButton(onClick = {
+                                        val selected = currentText.substring(range.first, range.last + 1)
+                                        pendingMark = null
+                                        viewModel.createHighlight(selected, range.first)
+                                    }) { Text("İşaretle") }
+                                }
                             }
                         }
                         if (state.previousPageText != null) {

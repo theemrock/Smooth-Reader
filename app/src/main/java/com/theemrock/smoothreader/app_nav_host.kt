@@ -36,7 +36,32 @@ internal fun AppNavHost(
 
         composable(Routes.HOME) {
             HomeScreen(
-                onOpenBook = { bookId -> nav.navigate(resumeRoute(bookId)) }
+                onOpenBook = { bookId -> nav.navigate(resumeRoute(bookId)) },
+                onOpenSettings = { nav.navigate(Routes.SETTINGS) },
+                onOpenHighlights = { nav.navigate(Routes.HIGHLIGHTS) }
+            )
+        }
+
+        composable(
+            route = "${Routes.RSVP}/{bookId}",
+            arguments = listOf(navArgument("bookId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            RsvpRouteScreen(
+                bookId = backStackEntry.arguments?.getString("bookId").orEmpty(),
+                onBack = { nav.popBackStack() }
+            )
+        }
+
+        composable(Routes.SETTINGS) {
+            SettingsScreen(onBack = { nav.popBackStack() })
+        }
+
+        composable(Routes.HIGHLIGHTS) {
+            HighlightsScreen(
+                onBack = { nav.popBackStack() },
+                onGoTo = { highlight ->
+                    nav.navigate(readerRoute(highlight.bookId, ReadingMode.READ, highlight.startOffset))
+                }
             )
         }
 
@@ -50,26 +75,34 @@ internal fun AppNavHost(
     onBack = { nav.popBackStack() },
     onContinue = { id ->
         nav.navigate(readerRoute(id, ReadingMode.READ))
+    },
+    onQuickRead = { id ->
+        nav.navigate(rsvpRoute(id))
     }
 )
         }
 
         composable(
-            route = "${Routes.READER}/{bookId}?mode={mode}",
+            route = "${Routes.READER}/{bookId}?mode={mode}&hl={hl}",
             arguments = listOf(
                 navArgument("bookId") { type = NavType.StringType },
                 navArgument("mode") {
                     type = NavType.StringType; defaultValue = ReadingMode.READ.name
+                },
+                navArgument("hl") {
+                    type = NavType.IntType; defaultValue = -1
                 }
             )
         ) { backStackEntry ->
             val bookId = backStackEntry.arguments?.getString("bookId").orEmpty()
             val modeStr = backStackEntry.arguments?.getString("mode").orEmpty()
             val mode = runCatching { ReadingMode.valueOf(modeStr) }.getOrElse { ReadingMode.READ }
+            val hl = backStackEntry.arguments?.getInt("hl") ?: -1
 
             ReaderScreen(
                 bookId = bookId,
                 mode = mode,
+                jumpOffset = hl.takeIf { it >= 0 },
                 onBack = {
                     // Reader'dan çıkınca direkt Home'a dön
                     nav.popBackStack(Routes.HOME, inclusive = false)

@@ -6,7 +6,9 @@ internal data class PlaybackPreparation(
     val position: ReadingPosition,
     val title: String,
     val author: String?,
-    val mode: ReadingMode
+    val mode: ReadingMode,
+    /** False when opened from a highlight: playback must not move the saved progress. */
+    val persistProgress: Boolean = true
 )
 
 internal data class PlaybackConnectionActions(

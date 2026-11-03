@@ -19,6 +19,7 @@ fun ResumeScreen(
     bookId: String,
     onBack: () -> Unit,
     onContinue: (String) -> Unit,
+    onQuickRead: (String) -> Unit = {},
     vm: ResumeViewModel = viewModel()
 ) {
     val state by vm.uiState.collectAsState()
@@ -127,12 +128,23 @@ fun ResumeScreen(
 
                     Spacer(Modifier.height(SmoothSpacing.l))
 
-                    // Alt buton (Devam Et)
-                    Button(
-                        onClick = { onContinue(bookId) },
-                        modifier = Modifier.fillMaxWidth()
+                    // Alt butonlar: Devam Et + Hızlı Oku (RSVP)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(SmoothSpacing.s)
                     ) {
-                        Text("Devam Et", style = MaterialTheme.typography.labelLarge)
+                        Button(
+                            onClick = { onContinue(bookId) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Devam Et", style = MaterialTheme.typography.labelLarge)
+                        }
+                        OutlinedButton(
+                            onClick = { onQuickRead(bookId) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Hızlı Oku", style = MaterialTheme.typography.labelLarge)
+                        }
                     }
                 }
             }

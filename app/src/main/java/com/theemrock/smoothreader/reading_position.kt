@@ -91,6 +91,16 @@ internal fun canonicalPositionForBookProgress(
 internal fun pageForPosition(pages: List<ReadingPage>, position: ReadingPosition): Int =
     pages.indexOfLast { comparePositions(it.start, position) <= 0 }.coerceAtLeast(0)
 
+/**
+ * Next/previous index derived from the canonical position, not from a cached page index.
+ * A cached index belongs to the previous layout and would move the audio backwards after resize.
+ */
+internal fun navigationTargetIndex(pages: List<ReadingPage>, position: ReadingPosition, direction: Int): Int {
+    if (pages.isEmpty()) return direction
+    if (comparePositions(position, pages.first().start) < 0) return if (direction > 0) 0 else -1
+    return pageForPosition(pages, position) + direction
+}
+
 internal fun pageContainsPosition(
     page: ReadingPage,
     position: ReadingPosition,

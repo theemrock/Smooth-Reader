@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.map
 import org.json.JSONArray
 import org.json.JSONObject
 
-private val Context.dataStore by preferencesDataStore(name = "ebook_reader_v1")
+internal val Context.dataStore by preferencesDataStore(name = "ebook_reader_v1")
 
 class LibraryStore(private val context: Context) {
 

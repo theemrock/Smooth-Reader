@@ -67,7 +67,8 @@ class ReaderPlaybackService : Service() {
             initialPosition: ReadingPosition,
             title: String,
             author: String?,
-            mode: ReadingMode
+            mode: ReadingMode,
+            persistProgress: Boolean = true
         ): Boolean {
             metadata = PlaybackBookMetadata(
                 bookId,
@@ -75,7 +76,7 @@ class ReaderPlaybackService : Service() {
                 author?.takeIf { it.isNotBlank() },
                 mode
             )
-            val prepared = controller.prepare(bookId, source, initialPosition)
+            val prepared = controller.prepare(bookId, source, initialPosition, persistProgress)
             publish(controller.state.value)
             return prepared
         }
@@ -123,7 +124,7 @@ class ReaderPlaybackService : Service() {
         createNotificationChannel()
         mediaSession = createMediaSession()
         controller = ReaderPlaybackController(
-            engine = TtsEngine(applicationContext),
+            engine = TtsEngine(applicationContext, TtsEnginePrefs.get(applicationContext)),
             scope = serviceScope,
             persistPosition = { bookId, position, totalParagraphs ->
                 ProgressStore(applicationContext).setProgress(

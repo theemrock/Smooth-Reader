@@ -24,8 +24,12 @@ internal interface SpeechEngine {
 }
 
 /** The only Android TextToSpeech adapter used by Reader playback. */
-internal class TtsEngine(context: Context) : TextToSpeech.OnInitListener, SpeechEngine {
-    private var tts: TextToSpeech? = TextToSpeech(context.applicationContext, this)
+internal class TtsEngine(context: Context, enginePackage: String = "") : TextToSpeech.OnInitListener, SpeechEngine {
+    private var tts: TextToSpeech? = if (enginePackage.isBlank()) {
+        TextToSpeech(context.applicationContext, this)
+    } else {
+        TextToSpeech(context.applicationContext, this, enginePackage)
+    }
     private var listener: SpeechEngine.Listener? = null
     private var initialized: Boolean? = null
     private var released = false

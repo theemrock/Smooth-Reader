@@ -47,6 +47,7 @@ class ReaderPlaybackControllerTest {
         fun range(utteranceId: String, start: Int, end: Int) =
             listener?.onRangeStart(utteranceId, start, end)
         fun done(utteranceId: String) = listener?.onDone(utteranceId)
+        fun error(utteranceId: String) = listener?.onError(utteranceId, null)
     }
 
     private fun controller(
@@ -72,6 +73,18 @@ class ReaderPlaybackControllerTest {
 
         assertEquals(1, engine.speaks.size)
         assertEquals("Bir.", engine.speaks.single().text)
+    }
+
+    @Test fun ttsErrorOnCurrentUtteranceStopsPlaybackInsteadOfStalling() {
+        val engine = FakeSpeechEngine()
+        val controller = controller(engine)
+        controller.prepare("book", ReadingSource(listOf("Bir. İki.")), ReadingPosition())
+        engine.ready()
+        controller.play()
+
+        engine.error(engine.speaks.single().utteranceId)
+
+        assertFalse(controller.state.value.isPlaying)
     }
 
     @Test fun onDonePersistsCanonicalEndAndStartsNextChunkWithoutUi() {

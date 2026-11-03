@@ -34,7 +34,8 @@ internal class ReaderPlaybackController(
         val id: Long,
         val bookId: String,
         val source: ReadingSource,
-        var position: ReadingPosition
+        var position: ReadingPosition,
+        val persist: Boolean = true
     )
 
     private data class SpokenChunk(
@@ -61,8 +62,13 @@ internal class ReaderPlaybackController(
 
     fun hasSession(bookId: String): Boolean = !released && session?.bookId == bookId
 
-    fun prepare(bookId: String, source: ReadingSource, initialPosition: ReadingPosition): Boolean {
-        if (released || hasSession(bookId)) return false
+    fun prepare(
+        bookId: String,
+        source: ReadingSource,
+        initialPosition: ReadingPosition,
+        persist: Boolean = true
+    ): Boolean {
+        if (released || (hasSession(bookId) && session?.persist == persist)) return false
         if (session != null || _state.value.isPlaying || spokenChunk != null) {
             invalidateAndStop("prepare")
         }
@@ -70,7 +76,8 @@ internal class ReaderPlaybackController(
             id = ++sessionSequence,
             bookId = bookId,
             source = source,
-            position = source.clamp(initialPosition)
+            position = source.clamp(initialPosition),
+            persist = persist
         )
         session = prepared
         spokenChunk = null
@@ -234,6 +241,10 @@ internal class ReaderPlaybackController(
 
     override fun onError(utteranceId: String?, errorCode: Int?) {
         log("onError | utteranceId: $utteranceId, errorCode: $errorCode, currentGen: $generation, chunkGen: ${spokenChunk?.generation}, isPlaying: ${_state.value.isPlaying}")
+        scope.launch {
+            // Android sends onError instead of onDone; without this, playback stays "playing" and never advances.
+            if (matchingChunk(utteranceId) != null) pause("ttsError")
+        }
     }
 
     override fun onStop(utteranceId: String?, interrupted: Boolean) {
@@ -286,6 +297,7 @@ internal class ReaderPlaybackController(
         if (safe == active.position) return
         active.position = safe
         _state.value = _state.value.copy(position = safe)
+        if (!active.persist) return
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
             withContext(NonCancellable) {
                 try {

@@ -56,6 +56,21 @@ internal fun canonicalWordStartForPageOffset(
     return source.positionAt(wordStart)
 }
 
+/** Book-wide slider target, snapped to the word start like a tap in the visible page. */
+internal fun canonicalWordStartForBookProgress(source: ReadingSource, progress: Float): ReadingPosition {
+    val tapped = (source.length * progress.coerceIn(0f, 1f)).roundToInt()
+    val text = source.text
+    val anchor = when {
+        tapped < source.length && isWordCharacter(text, tapped) -> tapped
+        tapped > 0 && isWordCharacter(text, tapped - 1) -> tapped - 1
+        else -> (tapped until source.length).firstOrNull { isWordCharacter(text, it) }
+            ?: (tapped - 1 downTo 0).firstOrNull { isWordCharacter(text, it) }
+    } ?: return source.positionAt(tapped)
+    var wordStart = anchor
+    while (wordStart > 0 && isWordCharacter(text, wordStart - 1)) wordStart--
+    return source.positionAt(wordStart)
+}
+
 private fun paragraphSentences(source: ReadingSource, paragraphIndex: Int): List<SentenceRange> {
     val paragraph = source.paragraphs.getOrNull(paragraphIndex) ?: return emptyList()
     if (paragraph.isBlank()) return emptyList()

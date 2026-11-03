@@ -32,6 +32,30 @@ class ReadingPositionTest {
         assertEquals(ReadingPosition(1, 6), canonicalPositionForBookProgress(progressSource, 2f))
     }
 
+    @Test fun bookProgressSnapsToWordStartAcrossPageAndParagraphBoundaries() {
+        val wordSource = ReadingSource(listOf("Bir iki üç", "dört"))
+
+        // source length 16: "Bir iki üç" (10) + separator (2) + "dört" (4)
+        assertEquals(ReadingPosition(0, 4), canonicalWordStartForBookProgress(wordSource, 0.35f)) // offset 6 inside "iki"
+        assertEquals(ReadingPosition(0, 0), canonicalWordStartForBookProgress(wordSource, 0.1f))  // offset 2 inside "Bir"
+        assertEquals(ReadingPosition(0, 8), canonicalWordStartForBookProgress(wordSource, 0.5f))  // offset 8 = start of "üç"
+        assertEquals(ReadingPosition(1, 0), canonicalWordStartForBookProgress(wordSource, 0.8f))  // offset 13 inside "dört" -> paragraph start
+        assertEquals(ReadingPosition(1, 0), canonicalWordStartForBookProgress(wordSource, 1f))    // end, clamped
+    }
+
+    @Test fun navigationUsesCanonicalPositionNotStaleIndexAfterRelayout() {
+        // Canonical position is inside page 1 of the new layout; a cached index of 0 must not be used.
+        assertEquals(2, navigationTargetIndex(pages, ReadingPosition(0, 8), 1))
+        assertEquals(4, navigationTargetIndex(pages, ReadingPosition(1, 8), 1))
+        assertEquals(2, navigationTargetIndex(pages, ReadingPosition(1, 8), -1))
+    }
+
+    @Test fun navigationBeforeFirstPageOfBlockStartsAtEdges() {
+        val block = pages.subList(2, 5)
+        assertEquals(0, navigationTargetIndex(block, ReadingPosition(0, 8), 1))
+        assertEquals(-1, navigationTargetIndex(block, ReadingPosition(0, 8), -1))
+    }
+
     @Test fun mapsFirstMiddleLastAndNonzeroCharacterOffset() {
         assertEquals(0, pageForPosition(pages, ReadingPosition()))
         assertEquals(2, pageForPosition(pages, ReadingPosition(1, 3)))
